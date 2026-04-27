@@ -1,0 +1,22 @@
+﻿* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}

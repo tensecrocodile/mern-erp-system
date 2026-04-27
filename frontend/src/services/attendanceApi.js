@@ -1,0 +1,31 @@
+﻿import api from './api';
+
+export const checkIn = async (location, selfieUrl) => {
+  const response = await api.post('/attendance/check-in', {
+    checkInAt: new Date().toISOString(),
+    location: {
+      latitude: location.lat,
+      longitude: location.lng,
+      accuracy: location.accuracy,
+      address: location.address || '',
+    },
+    selfieUrl,
+  });
+
+  return response.data;
+};
+
+export const checkOut = async (location, selfieUrl) => {
+  const response = await api.post('/attendance/check-out', {
+    checkOutAt: new Date().toISOString(),
+    location: {
+      latitude: location.lat,
+      longitude: location.lng,
+      accuracy: location.accuracy,
+      address: location.address || '',
+    },
+    selfieUrl,
+  });
+
+  return response.data;
+};

@@ -1,0 +1,19 @@
+/* Leaflet overrides — all layout/button/alert styles come from App.css */
+.leaflet-container {
+  background-color: #e0e7ff;
+}
+
+.leaflet-control-attribution {
+  font-size: 10px;
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  padding: 0;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 6px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15);
+}
