@@ -18,7 +18,7 @@ export const getAllClaims = async (params = {}) => {
   return response.data;
 };
 
-export const reviewClaim = async (id, status, comment = '') => {
-  const response = await api.patch(`/claims/${id}/review`, { status, reviewComment: comment });
+export const reviewClaim = async (id, action, comment = '') => {
+  const response = await api.patch(`/claims/${id}/review`, { action, comment });
   return response.data;
 };

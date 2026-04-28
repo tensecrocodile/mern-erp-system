@@ -13,13 +13,26 @@ const router = express.Router();
 
 router.use(protect);
 
-router.post("/", authorize(USER_ROLES.EMPLOYEE, USER_ROLES.MANAGER), validateLeaveSubmission, leaveController.applyLeave);
+router.post(
+  "/",
+  authorize(USER_ROLES.EMPLOYEE, USER_ROLES.MANAGER),
+  validateLeaveSubmission,
+  leaveController.applyLeave
+);
+
 router.get("/me", leaveController.getMyLeaves);
-router.get("/", authorize(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.HR, USER_ROLES.MANAGER), leaveController.getAllLeaves);
+
+router.get(
+  "/",
+  authorize(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.HR, USER_ROLES.MANAGER),
+  leaveController.getAllLeaves
+);
+
+// Only manager (pending_manager stage) and hr (pending_hr stage) may review.
 router.patch(
   "/:id/review",
   validateLeaveIdParam,
-  authorize(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.HR, USER_ROLES.MANAGER),
+  authorize(USER_ROLES.MANAGER, USER_ROLES.HR),
   validateLeaveReview,
   leaveController.reviewLeave
 );

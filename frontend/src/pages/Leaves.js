@@ -25,6 +25,14 @@ const LEAVE_TYPES = [
   { value: 'other',  label: 'Other'        },
 ];
 
+const FILTERS = [
+  { key: 'all',             label: 'All'             },
+  { key: 'pending_manager', label: 'Pending Manager' },
+  { key: 'pending_hr',      label: 'Pending HR'      },
+  { key: 'approved',        label: 'Approved'        },
+  { key: 'rejected',        label: 'Rejected'        },
+];
+
 const leaveLabel = (type) => LEAVE_TYPES.find((t) => t.value === type)?.label || type;
 
 function countDays(start, end) {
@@ -32,6 +40,67 @@ function countDays(start, end) {
   const diff = (new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24);
   return diff >= 0 ? diff + 1 : 0;
 }
+
+const formatDate = (d) =>
+  new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+const formatTime = (d) =>
+  new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+// ── Approval timeline ──────────────────────────────────────────
+
+const ApprovalTimeline = ({ history }) => {
+  if (!history || history.length === 0) return null;
+  return (
+    <div className="approval-timeline">
+      {history.map((step, i) => (
+        <div key={step._id || i} className={`timeline-step timeline-step--${step.action}`}>
+          <div className="timeline-dot" />
+          <div className="timeline-body">
+            <span className="timeline-label">
+              {step.role.charAt(0).toUpperCase() + step.role.slice(1)}{' '}
+              <strong>{step.action}</strong>
+            </span>
+            {step.by?.fullName && (
+              <span className="timeline-meta">by {step.by.fullName}</span>
+            )}
+            <span className="timeline-meta">{formatTime(step.timestamp)}</span>
+            {step.comment && (
+              <span className="timeline-comment">"{step.comment}"</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ── Review action bar ──────────────────────────────────────────
+
+const ReviewActions = ({ onApprove, onReject, busy }) => {
+  const [comment, setComment] = useState('');
+  return (
+    <div className="review-actions review-actions--col">
+      <input
+        className="form-input review-comment-input"
+        placeholder="Comment (optional, max 500 chars)…"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        maxLength={500}
+        disabled={busy}
+      />
+      <div className="review-action-btns">
+        <button className="btn btn-success btn-sm" onClick={() => onApprove(comment)} disabled={busy}>
+          Approve
+        </button>
+        <button className="btn btn-danger btn-sm" onClick={() => onReject(comment)} disabled={busy}>
+          Reject
+        </button>
+        {busy && <span className="list-meta">Saving…</span>}
+      </div>
+    </div>
+  );
+};
 
 // ── Employee view ──────────────────────────────────────────────
 
@@ -112,7 +181,7 @@ const EmployeeLeaves = () => {
       <div className="card">
         <div className="card-header">
           <h2 className="card-title">Apply for Leave</h2>
-          <p className="card-subtitle">Requests require manager approval. Plan ahead — apply at least a day in advance.</p>
+          <p className="card-subtitle">Requests go through manager then HR approval.</p>
         </div>
         {error   && <div className="alert alert-error"   role="alert">{error}</div>}
         {success && <div className="alert alert-success" role="status">{success}</div>}
@@ -124,7 +193,6 @@ const EmployeeLeaves = () => {
               {LEAVE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </label>
-
           <div className="form-row-2">
             <label className="form-label">
               Start Date
@@ -139,14 +207,12 @@ const EmployeeLeaves = () => {
               {days > 0 && <span className="form-hint form-hint--info">{days} day{days !== 1 ? 's' : ''}</span>}
             </label>
           </div>
-
           <label className="form-label">
             Reason
             <textarea name="reason" className="form-input" rows="3"
               value={form.reason} onChange={handleChange}
               placeholder="Briefly describe your reason for leave…" required />
           </label>
-
           <div className="form-actions">
             <button className="btn btn-primary" type="submit" disabled={submitting}>
               {submitting ? 'Submitting…' : 'Apply for Leave'}
@@ -175,9 +241,7 @@ const EmployeeLeaves = () => {
                     <div className="list-item-main">
                       <span className="list-title">{leaveLabel(leave.type)}</span>
                       <span className="list-meta">
-                        {new Date(leave.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        {' → '}
-                        {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {formatDate(leave.startDate)} → {formatDate(leave.endDate)}
                         {' · '}{d} day{d !== 1 ? 's' : ''}
                       </span>
                     </div>
@@ -186,11 +250,7 @@ const EmployeeLeaves = () => {
                     </span>
                   </div>
                   {leave.reason && <p className="list-desc">{leave.reason}</p>}
-                  {leave.reviewComment && (
-                    <p className="list-desc" style={{ fontStyle: 'italic', color: 'var(--subtle)' }}>
-                      Comment: "{leave.reviewComment}"
-                    </p>
-                  )}
+                  <ApprovalTimeline history={leave.approvalHistory} />
                 </div>
               );
             })}
@@ -201,22 +261,15 @@ const EmployeeLeaves = () => {
   );
 };
 
-// ── HR / Admin / Manager review view ──────────────────────────
-
-const ReviewActions = ({ onApprove, onReject, busy }) => (
-  <div className="review-actions">
-    <button className="btn btn-success btn-sm" onClick={onApprove} disabled={busy}>Approve</button>
-    <button className="btn btn-danger  btn-sm" onClick={onReject}  disabled={busy}>Reject</button>
-    {busy && <span className="list-meta">Saving…</span>}
-  </div>
-);
+// ── Management review view ─────────────────────────────────────
 
 const ManagementLeaves = () => {
+  const role = useRole();
   const [leaves, setLeaves]       = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [reviewing, setReviewing] = useState(null);
-  const [filter, setFilter]       = useState('pending');
+  const [filter, setFilter]       = useState('all');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -233,11 +286,13 @@ const ManagementLeaves = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleReview = async (id, status) => {
+  const handleReview = async (id, action, comment = '') => {
     setReviewing(id);
+    setError(null);
     try {
-      await reviewLeave(id, status);
-      setLeaves((prev) => prev.map((l) => l._id === id ? { ...l, status } : l));
+      const res = await reviewLeave(id, action, comment);
+      const updated = res?.data?.leave;
+      setLeaves((prev) => prev.map((l) => l._id === id ? (updated || l) : l));
     } catch (err) {
       setError(err?.message || 'Review action failed.');
     } finally {
@@ -245,9 +300,20 @@ const ManagementLeaves = () => {
     }
   };
 
-  const isPending = (l) => l.status === 'pending_manager' || l.status === 'pending_hr';
-  const visible = filter === 'pending' ? leaves.filter(isPending) : leaves;
-  const pendingCount = leaves.filter(isPending).length;
+  const canReview = (leave) =>
+    (role === 'manager' && leave.status === 'pending_manager') ||
+    (role === 'hr'      && leave.status === 'pending_hr');
+
+  const countFor = (key) => {
+    if (key === 'all') return leaves.length;
+    return leaves.filter((l) => l.status === key).length;
+  };
+
+  const visible = filter === 'all' ? leaves : leaves.filter((l) => l.status === filter);
+
+  const pendingCount = leaves.filter(
+    (l) => l.status === 'pending_manager' || l.status === 'pending_hr'
+  ).length;
 
   return (
     <div className="page">
@@ -264,10 +330,15 @@ const ManagementLeaves = () => {
       <div className="card">
         <div className="card-header">
           <div className="rbac-filter-row">
-            <button className={`btn btn-sm ${filter === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilter('pending')}>Pending ({pendingCount})</button>
-            <button className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilter('all')}>All ({leaves.length})</button>
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                className={`btn btn-sm ${filter === f.key ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilter(f.key)}
+              >
+                {f.label} ({countFor(f.key)})
+              </button>
+            ))}
           </div>
         </div>
 
@@ -276,8 +347,8 @@ const ManagementLeaves = () => {
         {!loading && visible.length === 0 && (
           <div className="empty-state">
             <div className="empty-state-icon">✓</div>
-            <div className="empty-state-title">All clear</div>
-            <div className="empty-state-sub">No {filter === 'pending' ? 'pending' : ''} leave requests to review.</div>
+            <div className="empty-state-title">Nothing here</div>
+            <div className="empty-state-sub">No leave requests match the selected filter.</div>
           </div>
         )}
 
@@ -292,9 +363,7 @@ const ManagementLeaves = () => {
                       <span className="list-title">{leave.userId?.fullName || 'Employee'}</span>
                       <span className="list-meta">
                         {leaveLabel(leave.type)} · {d} day{d !== 1 ? 's' : ''} ·{' '}
-                        {new Date(leave.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        {' → '}
-                        {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {formatDate(leave.startDate)} → {formatDate(leave.endDate)}
                       </span>
                     </div>
                     <span className={`tag ${STATUS_TAG[leave.status] || 'tag-pending'}`}>
@@ -302,17 +371,15 @@ const ManagementLeaves = () => {
                     </span>
                   </div>
                   {leave.reason && <p className="list-desc">{leave.reason}</p>}
-                  {isPending(leave) && (
+
+                  <ApprovalTimeline history={leave.approvalHistory} />
+
+                  {canReview(leave) && (
                     <ReviewActions
-                      onApprove={() => handleReview(leave._id, 'approved')}
-                      onReject={() => handleReview(leave._id, 'rejected')}
+                      onApprove={(comment) => handleReview(leave._id, 'approve', comment)}
+                      onReject={(comment)  => handleReview(leave._id, 'reject',  comment)}
                       busy={reviewing === leave._id}
                     />
-                  )}
-                  {leave.reviewComment && (
-                    <p className="list-desc" style={{ fontStyle: 'italic', color: 'var(--subtle)' }}>
-                      Comment: "{leave.reviewComment}"
-                    </p>
                   )}
                 </div>
               );
@@ -324,7 +391,7 @@ const ManagementLeaves = () => {
   );
 };
 
-// ── Root export: picks the right view by role ──────────────────
+// ── Root export ────────────────────────────────────────────────
 
 const Leaves = () => {
   const role = useRole();

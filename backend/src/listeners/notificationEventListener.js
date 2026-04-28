@@ -7,53 +7,59 @@ const eventBus = require("../utils/eventBus");
 
 let listenersInitialized = false;
 
-async function handleTripIdleDetected(payload) {
-  await notificationService.createTripIdleNotificationsForAdmins(payload);
-}
-
-async function handleClaimReviewed(payload) {
-  await notificationService.createClaimReviewNotification(payload);
-}
-
-async function handleLeaveReviewed(payload) {
-  await notificationService.createLeaveReviewNotification(payload);
+function handle(label, fn) {
+  return (payload) => {
+    Promise.resolve(fn(payload)).catch((err) => {
+      logger.error(`Notification listener failed for ${label}.`, {
+        message: err.message,
+        stack:   err.stack,
+      });
+    });
+  };
 }
 
 function initializeNotificationEventListeners() {
-  if (listenersInitialized) {
-    return;
-  }
+  if (listenersInitialized) return;
 
-  eventBus.on(TRIP_EVENTS.IDLE_DETECTED, (payload) => {
-    Promise.resolve(handleTripIdleDetected(payload)).catch((error) => {
-      logger.error("Notification listener failed for trip.idle.detected.", {
-        message: error.message,
-        stack: error.stack,
-      });
-    });
-  });
+  // ── Trip ──
+  eventBus.on(
+    TRIP_EVENTS.IDLE_DETECTED,
+    handle("trip.idle.detected", (p) => notificationService.createTripIdleNotificationsForAdmins(p))
+  );
 
-  eventBus.on(CLAIM_EVENTS.REVIEWED, (payload) => {
-    Promise.resolve(handleClaimReviewed(payload)).catch((error) => {
-      logger.error("Notification listener failed for claim.reviewed.", {
-        message: error.message,
-        stack: error.stack,
-      });
-    });
-  });
+  // ── Claims ──
+  eventBus.on(
+    CLAIM_EVENTS.SUBMITTED,
+    handle("claim.submitted", (p) => notificationService.createClaimSubmittedNotification(p))
+  );
 
-  eventBus.on(LEAVE_EVENTS.REVIEWED, (payload) => {
-    Promise.resolve(handleLeaveReviewed(payload)).catch((error) => {
-      logger.error("Notification listener failed for leave.reviewed.", {
-        message: error.message,
-        stack: error.stack,
-      });
-    });
-  });
+  eventBus.on(
+    CLAIM_EVENTS.STAGE_PROGRESSED,
+    handle("claim.stage.progressed", (p) => notificationService.createClaimStageProgressedNotification(p))
+  );
+
+  eventBus.on(
+    CLAIM_EVENTS.REVIEWED,
+    handle("claim.reviewed", (p) => notificationService.createClaimReviewNotification(p))
+  );
+
+  // ── Leaves ──
+  eventBus.on(
+    LEAVE_EVENTS.SUBMITTED,
+    handle("leave.submitted", (p) => notificationService.createLeaveSubmittedNotification(p))
+  );
+
+  eventBus.on(
+    LEAVE_EVENTS.STAGE_PROGRESSED,
+    handle("leave.stage.progressed", (p) => notificationService.createLeaveStageProgressedNotification(p))
+  );
+
+  eventBus.on(
+    LEAVE_EVENTS.REVIEWED,
+    handle("leave.reviewed", (p) => notificationService.createLeaveReviewNotification(p))
+  );
 
   listenersInitialized = true;
 }
 
-module.exports = {
-  initializeNotificationEventListeners,
-};
+module.exports = { initializeNotificationEventListeners };

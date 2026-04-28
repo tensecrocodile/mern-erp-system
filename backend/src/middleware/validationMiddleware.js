@@ -212,14 +212,14 @@ const validateClaimSubmission = makeValidator([
 ]);
 
 const validateClaimReview = makeValidator([
-  body("status")
-    .isIn(["approved", "rejected"])
-    .withMessage("status must be either approved or rejected."),
+  body("action")
+    .isIn(["approve", "reject"])
+    .withMessage("action must be either 'approve' or 'reject'."),
   body("comment")
     .optional({ values: "falsy" })
     .isString()
-    .isLength({ max: 1000 })
-    .withMessage("comment must be a string up to 1000 characters."),
+    .isLength({ max: 500 })
+    .withMessage("comment must be a string up to 500 characters."),
 ]);
 
 const validateHolidayIdParam = makeValidator([
@@ -282,14 +282,14 @@ const validateLeaveSubmission = makeValidator([
 ]);
 
 const validateLeaveReview = makeValidator([
-  body("status")
-    .isIn(["approved", "rejected"])
-    .withMessage("status must be either approved or rejected."),
+  body("action")
+    .isIn(["approve", "reject"])
+    .withMessage("action must be either 'approve' or 'reject'."),
   body("comment")
     .optional({ values: "falsy" })
     .isString()
-    .isLength({ max: 1000 })
-    .withMessage("comment must be a string up to 1000 characters."),
+    .isLength({ max: 500 })
+    .withMessage("comment must be a string up to 500 characters."),
 ]);
 
 const validateMeetingCreation = makeValidator([

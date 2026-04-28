@@ -2,6 +2,17 @@ const mongoose = require("mongoose");
 
 const { LEAVE_STATUS, LEAVE_TYPES } = require("../utils/constants");
 
+const approvalEntrySchema = new mongoose.Schema(
+  {
+    action:    { type: String, enum: ["approved", "rejected"], required: true },
+    by:        { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    role:      { type: String, enum: ["manager", "hr"], required: true },
+    comment:   { type: String, trim: true, maxlength: 500, default: "" },
+    timestamp: { type: Date, default: Date.now },
+  },
+  { _id: true }
+);
+
 const leaveSchema = new mongoose.Schema(
   {
     userId: {
@@ -38,44 +49,24 @@ const leaveSchema = new mongoose.Schema(
       default: LEAVE_STATUS.PENDING_MANAGER,
       index: true,
     },
-    managerReviewedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
-    managerReviewedAt: {
-      type: Date,
-      default: null,
-    },
-    managerComment: {
+    currentStage: {
       type: String,
-      trim: true,
-      maxlength: 1000,
-      default: "",
+      enum: ["manager", "hr", "completed"],
+      default: "manager",
+      index: true,
     },
-    reviewedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
-    reviewedAt: {
-      type: Date,
-      default: null,
-    },
-    reviewComment: {
-      type: String,
-      trim: true,
-      maxlength: 1000,
-      default: "",
+    approvalHistory: {
+      type: [approvalEntrySchema],
+      default: [],
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
+leaveSchema.index({ userId: 1, status: 1 });
 leaveSchema.index({ userId: 1, startDate: -1, endDate: -1 });
 leaveSchema.index({ status: 1, startDate: 1, endDate: 1 });
+leaveSchema.index({ "approvalHistory.by": 1 });
 
 leaveSchema.set("toJSON", {
   transform: (_doc, ret) => {

@@ -3,97 +3,68 @@ const User = require("../models/User");
 const ApiError = require("../utils/apiError");
 const { CLAIM_STATUS, CLAIM_TYPES, USER_ROLES } = require("../utils/constants");
 const { getUtcStartOfDay } = require("../utils/date");
-const { emitClaimReviewed } = require("./claimEventService");
+const { reviewRequest } = require("./approvalWorkflowService");
+const {
+  emitClaimSubmitted,
+  emitClaimStageProgressed,
+  emitClaimReviewed,
+} = require("./claimEventService");
 const logger = require("../utils/logger");
+
+// ── Normalisation helpers ──────────────────────────────────────
 
 function isValidHttpUrl(value) {
   try {
-    const parsedUrl = new URL(value);
-    return ["http:", "https:"].includes(parsedUrl.protocol);
-  } catch (_error) {
+    const u = new URL(value);
+    return ["http:", "https:"].includes(u.protocol);
+  } catch {
     return false;
   }
 }
 
 function normalizeAttachments(attachments) {
-  if (!Array.isArray(attachments)) {
-    return [];
-  }
-
-  return attachments.map((attachment) => {
-    const normalizedAttachment = typeof attachment === "string" ? attachment.trim() : "";
-
-    if (!normalizedAttachment || !isValidHttpUrl(normalizedAttachment)) {
-      throw new ApiError(400, "Each attachment must be a valid HTTP or HTTPS URL.");
-    }
-
-    return normalizedAttachment;
+  if (!Array.isArray(attachments)) return [];
+  return attachments.map((a) => {
+    const s = typeof a === "string" ? a.trim() : "";
+    if (!s || !isValidHttpUrl(s)) throw new ApiError(400, "Each attachment must be a valid HTTP/HTTPS URL.");
+    return s;
   });
 }
 
 function normalizeClaimDate(dateInput) {
-  const parsedDate = dateInput ? new Date(dateInput) : new Date();
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    throw new ApiError(400, "Claim date must be a valid ISO date.");
-  }
-
-  return getUtcStartOfDay(parsedDate);
+  const d = dateInput ? new Date(dateInput) : new Date();
+  if (Number.isNaN(d.getTime())) throw new ApiError(400, "Claim date must be a valid ISO date.");
+  return getUtcStartOfDay(d);
 }
 
 function normalizeDescription(description) {
-  const normalizedDescription = typeof description === "string" ? description.trim() : "";
-
-  if (!normalizedDescription) {
-    throw new ApiError(400, "Claim description is required.");
-  }
-
-  return normalizedDescription;
+  const s = typeof description === "string" ? description.trim() : "";
+  if (!s) throw new ApiError(400, "Claim description is required.");
+  return s;
 }
 
 function normalizeAmount(amount) {
-  const normalizedAmount = Number(amount);
-
-  if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-    throw new ApiError(400, "Claim amount must be a positive number.");
-  }
-
-  return Number(normalizedAmount.toFixed(2));
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) throw new ApiError(400, "Claim amount must be a positive number.");
+  return Number(n.toFixed(2));
 }
 
 function normalizeClaimType(type) {
-  if (!Object.values(CLAIM_TYPES).includes(type)) {
-    throw new ApiError(400, "Claim type is invalid.");
-  }
-
+  if (!Object.values(CLAIM_TYPES).includes(type)) throw new ApiError(400, "Claim type is invalid.");
   return type;
-}
-
-function normalizeReviewComment(comment) {
-  return typeof comment === "string" ? comment.trim() : "";
 }
 
 function buildClaimQueryFilters(filters = {}) {
   const query = {};
-
   if (filters.status !== undefined) {
-    if (!Object.values(CLAIM_STATUS).includes(filters.status)) {
+    if (!Object.values(CLAIM_STATUS).includes(filters.status))
       throw new ApiError(400, "Claim status filter is invalid.");
-    }
-
     query.status = filters.status;
   }
-
   if (filters.date !== undefined) {
-    const startOfDay = normalizeClaimDate(filters.date);
-    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-
-    query.date = {
-      $gte: startOfDay,
-      $lt: endOfDay,
-    };
+    const start = normalizeClaimDate(filters.date);
+    query.date = { $gte: start, $lt: new Date(start.getTime() + 86400000) };
   }
-
   return query;
 }
 
@@ -101,26 +72,44 @@ async function getTeamUserIds(managerId) {
   return User.find({ managerId }).distinct("_id");
 }
 
+// ── Public API ─────────────────────────────────────────────────
+
 async function createClaim(userId, data) {
   const claim = await Claim.create({
     userId,
-    type: normalizeClaimType(data.type),
-    amount: normalizeAmount(data.amount),
-    date: normalizeClaimDate(data.date),
+    type:        normalizeClaimType(data.type),
+    amount:      normalizeAmount(data.amount),
+    date:        normalizeClaimDate(data.date),
     description: normalizeDescription(data.description),
     attachments: normalizeAttachments(data.attachments),
-    status: CLAIM_STATUS.PENDING_MANAGER,
-    reviewedBy: null,
-    reviewComment: "",
+    status:        CLAIM_STATUS.PENDING_MANAGER,
+    currentStage:  "manager",
+    approvalHistory: [],
+  });
+
+  emitClaimSubmitted({
+    eventName: "claim.submitted",
+    claimId:   claim._id.toString(),
+    userId:    claim.userId.toString(),
+    type:      claim.type,
+    amount:    claim.amount,
+  });
+
+  logger.info("Claim submitted.", {
+    claimId: claim._id.toString(),
+    userId:  claim.userId.toString(),
+    type:    claim.type,
+    amount:  claim.amount,
   });
 
   return claim.toJSON();
 }
 
 async function getUserClaims(userId) {
-  const claims = await Claim.find({ userId }).sort({ createdAt: -1 });
-
-  return claims.map((claim) => claim.toJSON());
+  const claims = await Claim.find({ userId })
+    .populate("approvalHistory.by", "fullName role")
+    .sort({ createdAt: -1 });
+  return claims.map((c) => c.toJSON());
 }
 
 async function getAllClaims(requesterId, requesterRole, filters = {}) {
@@ -133,92 +122,49 @@ async function getAllClaims(requesterId, requesterRole, filters = {}) {
 
   const claims = await Claim.find(query)
     .populate("userId", "fullName email employeeId role")
-    .populate("managerReviewedBy", "fullName email role")
-    .populate("reviewedBy", "fullName email role")
+    .populate("approvalHistory.by", "fullName role")
     .sort({ createdAt: -1 });
 
-  return claims.map((claim) => claim.toJSON());
+  return claims.map((c) => c.toJSON());
 }
 
 async function reviewClaim(reviewerId, claimId, action, comment) {
-  const reviewer = await User.findById(reviewerId).select("_id role isActive");
+  const { doc: claim, reviewer, previousStatus } = await reviewRequest({
+    model:      Claim,
+    requestId:  claimId,
+    reviewerId,
+    action,
+    comment,
+  });
 
-  if (!reviewer || !reviewer.isActive) {
-    throw new ApiError(401, "Reviewing user is inactive or no longer exists.");
-  }
+  const isFinalized = claim.status === CLAIM_STATUS.APPROVED || claim.status === CLAIM_STATUS.REJECTED;
 
-  const claim = await Claim.findById(claimId);
-
-  if (!claim) {
-    throw new ApiError(404, "Claim not found.");
-  }
-
-  const reviewComment = normalizeReviewComment(comment);
-  const isApprove = action === "approved";
-  const isReject = action === "rejected";
-
-  if (!isApprove && !isReject) {
-    throw new ApiError(400, "Review action must be either approved or rejected.");
-  }
-
-  if (reviewer.role === USER_ROLES.MANAGER) {
-    if (claim.status !== CLAIM_STATUS.PENDING_MANAGER) {
-      throw new ApiError(409, "This claim is not awaiting manager review.");
-    }
-
-    claim.managerReviewedBy = reviewer._id;
-    claim.managerReviewedAt = new Date();
-    claim.managerComment = reviewComment;
-
-    if (isApprove) {
-      claim.status = CLAIM_STATUS.PENDING_HR;
-    } else {
-      claim.status = CLAIM_STATUS.REJECTED;
-      claim.reviewedBy = reviewer._id;
-      claim.reviewedAt = new Date();
-      claim.reviewComment = reviewComment;
-    }
-  } else if ([USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.HR].includes(reviewer.role)) {
-    if (claim.status !== CLAIM_STATUS.PENDING_HR) {
-      throw new ApiError(409, "This claim is not awaiting HR/Admin review.");
-    }
-
-    claim.reviewedBy = reviewer._id;
-    claim.reviewedAt = new Date();
-    claim.reviewComment = reviewComment;
-    claim.status = isApprove ? CLAIM_STATUS.APPROVED : CLAIM_STATUS.REJECTED;
+  if (isFinalized) {
+    emitClaimReviewed({
+      eventName:     "claim.reviewed",
+      claimId:       claim._id.toString(),
+      userId:        claim.userId.toString(),
+      status:        claim.status,
+      type:          claim.type,
+      amount:        claim.amount,
+      reviewedBy:    reviewer._id.toString(),
+      reviewComment: typeof comment === "string" ? comment.trim() : "",
+    });
   } else {
-    throw new ApiError(403, "You do not have permission to review claims.");
+    // Manager approved → now pending HR
+    emitClaimStageProgressed({
+      eventName:    "claim.stage.progressed",
+      claimId:      claim._id.toString(),
+      userId:       claim.userId.toString(),
+      status:       claim.status,
+      previousStatus,
+      type:         claim.type,
+      amount:       claim.amount,
+      progressedBy: reviewer._id.toString(),
+    });
   }
-
-  await claim.save();
-
-  logger.info("Claim reviewed.", {
-    claimId: claim._id.toString(),
-    userId: claim.userId.toString(),
-    status: claim.status,
-    type: claim.type,
-    amount: claim.amount,
-    reviewedBy: reviewer._id.toString(),
-  });
-
-  emitClaimReviewed({
-    eventName: "claim.reviewed",
-    claimId: claim._id.toString(),
-    userId: claim.userId.toString(),
-    status: claim.status,
-    type: claim.type,
-    amount: claim.amount,
-    reviewedBy: reviewer._id.toString(),
-    reviewComment,
-  });
 
   return claim.toJSON();
 }
 
-module.exports = {
-  createClaim,
-  getAllClaims,
-  getUserClaims,
-  reviewClaim,
-};
+module.exports = { createClaim, getAllClaims, getUserClaims, reviewClaim };

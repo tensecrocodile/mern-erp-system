@@ -25,8 +25,77 @@ const STATUS_LABEL = {
   pending_hr:      'Awaiting HR',
 };
 
+const FILTERS = [
+  { key: 'all',             label: 'All'             },
+  { key: 'pending_manager', label: 'Pending Manager' },
+  { key: 'pending_hr',      label: 'Pending HR'      },
+  { key: 'approved',        label: 'Approved'        },
+  { key: 'rejected',        label: 'Rejected'        },
+];
+
 const formatCurrency = (n) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
+
+const formatDate = (d) =>
+  new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+const formatTime = (d) =>
+  new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+// ── Approval timeline ──────────────────────────────────────────
+
+const ApprovalTimeline = ({ history }) => {
+  if (!history || history.length === 0) return null;
+  return (
+    <div className="approval-timeline">
+      {history.map((step, i) => (
+        <div key={step._id || i} className={`timeline-step timeline-step--${step.action}`}>
+          <div className="timeline-dot" />
+          <div className="timeline-body">
+            <span className="timeline-label">
+              {step.role.charAt(0).toUpperCase() + step.role.slice(1)}{' '}
+              <strong>{step.action}</strong>
+            </span>
+            {step.by?.fullName && (
+              <span className="timeline-meta">by {step.by.fullName}</span>
+            )}
+            <span className="timeline-meta">{formatTime(step.timestamp)}</span>
+            {step.comment && (
+              <span className="timeline-comment">"{step.comment}"</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ── Review action bar (only shown to eligible reviewer) ────────
+
+const ReviewActions = ({ onApprove, onReject, busy }) => {
+  const [comment, setComment] = useState('');
+  return (
+    <div className="review-actions review-actions--col">
+      <input
+        className="form-input review-comment-input"
+        placeholder="Comment (optional, max 500 chars)…"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        maxLength={500}
+        disabled={busy}
+      />
+      <div className="review-action-btns">
+        <button className="btn btn-success btn-sm" onClick={() => onApprove(comment)} disabled={busy}>
+          Approve
+        </button>
+        <button className="btn btn-danger btn-sm" onClick={() => onReject(comment)} disabled={busy}>
+          Reject
+        </button>
+        {busy && <span className="list-meta">Saving…</span>}
+      </div>
+    </div>
+  );
+};
 
 // ── Employee view ──────────────────────────────────────────────
 
@@ -79,7 +148,7 @@ const EmployeeClaims = () => {
     setSubmitting(true);
     try {
       const res = await submitClaim({ type: form.type, amount, date: form.date, description: form.description, attachments: [] });
-      setSuccess('Claim submitted! It\'s now awaiting manager review.');
+      setSuccess("Claim submitted! It's now awaiting manager review.");
       setClaims((c) => [(res.data?.claim || res.data || res), ...c]);
       setForm(EMPTY_FORM);
       setDateError(null);
@@ -103,7 +172,7 @@ const EmployeeClaims = () => {
       <div className="card">
         <div className="card-header">
           <h2 className="card-title">New Claim</h2>
-          <p className="card-subtitle">All claims require manager approval before reimbursement.</p>
+          <p className="card-subtitle">All claims require manager then HR approval before reimbursement.</p>
         </div>
         {error   && <div className="alert alert-error"   role="alert">{error}</div>}
         {success && <div className="alert alert-success" role="status">{success}</div>}
@@ -162,7 +231,7 @@ const EmployeeClaims = () => {
                 <div className="list-row">
                   <div className="list-item-main">
                     <span className="list-title">{claim.type?.charAt(0).toUpperCase() + claim.type?.slice(1)}</span>
-                    <span className="list-meta">{new Date(claim.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <span className="list-meta">{formatDate(claim.date)}</span>
                   </div>
                   <span className={`tag ${STATUS_TAG[claim.status] || 'tag-pending'}`}>
                     {STATUS_LABEL[claim.status] || 'Pending'}
@@ -171,8 +240,8 @@ const EmployeeClaims = () => {
                 {claim.description && <p className="list-desc">{claim.description}</p>}
                 <div className="list-row">
                   <span className="claim-amount">{formatCurrency(claim.amount)}</span>
-                  {claim.reviewComment && <span className="list-meta" style={{ fontStyle: 'italic' }}>"{claim.reviewComment}"</span>}
                 </div>
+                <ApprovalTimeline history={claim.approvalHistory} />
               </div>
             ))}
           </div>
@@ -182,27 +251,15 @@ const EmployeeClaims = () => {
   );
 };
 
-// ── HR / Admin review view ──────────────────────────────────────
-
-const STAGE_LABELS = {
-  pending_manager: 'Manager Review',
-  pending_hr:      'HR Review',
-};
-
-const ReviewActions = ({ onApprove, onReject, busy }) => (
-  <div className="review-actions">
-    <button className="btn btn-success btn-sm" onClick={onApprove} disabled={busy}>Approve</button>
-    <button className="btn btn-danger  btn-sm" onClick={onReject}  disabled={busy}>Reject</button>
-    {busy && <span className="list-meta">Saving…</span>}
-  </div>
-);
+// ── Management review view ─────────────────────────────────────
 
 const ManagementClaims = () => {
-  const [claims, setClaims]     = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
+  const role = useRole();
+  const [claims, setClaims]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
   const [reviewing, setReviewing] = useState(null);
-  const [filter, setFilter]     = useState('pending');
+  const [filter, setFilter]       = useState('all');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -219,11 +276,13 @@ const ManagementClaims = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleReview = async (id, status) => {
+  const handleReview = async (id, action, comment = '') => {
     setReviewing(id);
+    setError(null);
     try {
-      await reviewClaim(id, status);
-      setClaims((prev) => prev.map((c) => c._id === id ? { ...c, status } : c));
+      const res = await reviewClaim(id, action, comment);
+      const updated = res?.data?.claim;
+      setClaims((prev) => prev.map((c) => c._id === id ? (updated || c) : c));
     } catch (err) {
       setError(err?.message || 'Review action failed.');
     } finally {
@@ -231,9 +290,20 @@ const ManagementClaims = () => {
     }
   };
 
-  const isPending = (c) => c.status === 'pending_manager' || c.status === 'pending_hr';
-  const visible = filter === 'pending' ? claims.filter(isPending) : claims;
-  const pendingCount = claims.filter(isPending).length;
+  const canReview = (claim) =>
+    (role === 'manager' && claim.status === 'pending_manager') ||
+    (role === 'hr'      && claim.status === 'pending_hr');
+
+  const countFor = (key) => {
+    if (key === 'all') return claims.length;
+    return claims.filter((c) => c.status === key).length;
+  };
+
+  const visible = filter === 'all' ? claims : claims.filter((c) => c.status === filter);
+
+  const pendingCount = claims.filter(
+    (c) => c.status === 'pending_manager' || c.status === 'pending_hr'
+  ).length;
 
   return (
     <div className="page">
@@ -250,10 +320,15 @@ const ManagementClaims = () => {
       <div className="card">
         <div className="card-header">
           <div className="rbac-filter-row">
-            <button className={`btn btn-sm ${filter === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilter('pending')}>Pending ({pendingCount})</button>
-            <button className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilter('all')}>All ({claims.length})</button>
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                className={`btn btn-sm ${filter === f.key ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilter(f.key)}
+              >
+                {f.label} ({countFor(f.key)})
+              </button>
+            ))}
           </div>
         </div>
 
@@ -262,8 +337,8 @@ const ManagementClaims = () => {
         {!loading && visible.length === 0 && (
           <div className="empty-state">
             <div className="empty-state-icon">✓</div>
-            <div className="empty-state-title">All clear</div>
-            <div className="empty-state-sub">No {filter === 'pending' ? 'pending' : ''} claims to review.</div>
+            <div className="empty-state-title">Nothing here</div>
+            <div className="empty-state-sub">No claims match the selected filter.</div>
           </div>
         )}
 
@@ -275,7 +350,7 @@ const ManagementClaims = () => {
                   <div className="list-item-main">
                     <span className="list-title">{claim.userId?.fullName || 'Employee'}</span>
                     <span className="list-meta">
-                      {claim.type} · {new Date(claim.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {claim.type} · {formatDate(claim.date)}
                     </span>
                   </div>
                   <span className={`tag ${STATUS_TAG[claim.status] || 'tag-pending'}`}>
@@ -285,21 +360,16 @@ const ManagementClaims = () => {
                 {claim.description && <p className="list-desc">{claim.description}</p>}
                 <div className="list-row">
                   <span className="claim-amount">{formatCurrency(claim.amount)}</span>
-                  {claim.status && STAGE_LABELS[claim.status] && (
-                    <span className="tag tag-secondary" style={{ fontSize: 11 }}>{STAGE_LABELS[claim.status]}</span>
-                  )}
                 </div>
-                {isPending(claim) && (
+
+                <ApprovalTimeline history={claim.approvalHistory} />
+
+                {canReview(claim) && (
                   <ReviewActions
-                    onApprove={() => handleReview(claim._id, 'approved')}
-                    onReject={() => handleReview(claim._id, 'rejected')}
+                    onApprove={(comment) => handleReview(claim._id, 'approve', comment)}
+                    onReject={(comment)  => handleReview(claim._id, 'reject',  comment)}
                     busy={reviewing === claim._id}
                   />
-                )}
-                {claim.reviewComment && (
-                  <p className="list-desc" style={{ fontStyle: 'italic', color: 'var(--subtle)' }}>
-                    Comment: "{claim.reviewComment}"
-                  </p>
                 )}
               </div>
             ))}
@@ -310,7 +380,7 @@ const ManagementClaims = () => {
   );
 };
 
-// ── Root export: picks the right view by role ──────────────────
+// ── Root export ────────────────────────────────────────────────
 
 const Claims = () => {
   const role = useRole();

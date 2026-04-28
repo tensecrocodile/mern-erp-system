@@ -17,7 +17,7 @@ export const getAllLeaves = async (params = {}) => {
   return response.data;
 };
 
-export const reviewLeave = async (id, status, comment = '') => {
-  const response = await api.patch(`/leaves/${id}/review`, { status, reviewComment: comment });
+export const reviewLeave = async (id, action, comment = '') => {
+  const response = await api.patch(`/leaves/${id}/review`, { action, comment });
   return response.data;
 };
