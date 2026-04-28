@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { getMyNotifications } from '../../services/notificationsApi';
 
 const SidebarLink = ({ to, icon, label, badge }) => (
@@ -16,7 +16,6 @@ const SidebarLink = ({ to, icon, label, badge }) => (
 );
 
 const Sidebar = ({ collapsed, onToggle, menuItems = [] }) => {
-  const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
   const intervalRef = useRef(null);
 
@@ -35,13 +34,6 @@ const Sidebar = ({ collapsed, onToggle, menuItems = [] }) => {
     intervalRef.current = setInterval(fetchUnread, 30_000);
     return () => clearInterval(intervalRef.current);
   }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
-    localStorage.removeItem('name');
-    navigate('/login', { replace: true });
-  };
 
   return (
     <aside className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`}>
@@ -90,16 +82,6 @@ const Sidebar = ({ collapsed, onToggle, menuItems = [] }) => {
         </div>
       </nav>
 
-      <div className="sidebar-footer">
-        <button
-          type="button"
-          className="sidebar-logout"
-          onClick={handleLogout}
-        >
-          <span className="sidebar-link-icon">⊗</span>
-          {!collapsed && <span className="sidebar-link-label">Sign Out</span>}
-        </button>
-      </div>
     </aside>
   );
 };
