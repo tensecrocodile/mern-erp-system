@@ -13,7 +13,7 @@ const router = express.Router();
 
 router.use(protect);
 
-router.post("/", validateLeaveSubmission, leaveController.applyLeave);
+router.post("/", authorize(USER_ROLES.EMPLOYEE, USER_ROLES.MANAGER), validateLeaveSubmission, leaveController.applyLeave);
 router.get("/me", leaveController.getMyLeaves);
 router.get("/", authorize(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.HR, USER_ROLES.MANAGER), leaveController.getAllLeaves);
 router.patch(

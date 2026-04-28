@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { applyLeave, getMyLeaves } from '../services/leavesApi';
+import { useState, useEffect, useCallback } from 'react';
+import { applyLeave, getMyLeaves, getAllLeaves, reviewLeave } from '../services/leavesApi';
+import { useRole, isEmployeeRole } from '../components/common/RoleGuard';
 
 const TODAY = new Date().toISOString().split('T')[0];
 
@@ -19,10 +20,12 @@ const STATUS_LABEL = {
 
 const LEAVE_TYPES = [
   { value: 'casual', label: 'Casual Leave' },
-  { value: 'sick',   label: 'Sick Leave' },
+  { value: 'sick',   label: 'Sick Leave'   },
   { value: 'earned', label: 'Earned Leave' },
-  { value: 'other',  label: 'Other' },
+  { value: 'other',  label: 'Other'        },
 ];
+
+const leaveLabel = (type) => LEAVE_TYPES.find((t) => t.value === type)?.label || type;
 
 function countDays(start, end) {
   if (!start || !end) return 0;
@@ -30,9 +33,11 @@ function countDays(start, end) {
   return diff >= 0 ? diff + 1 : 0;
 }
 
+// ── Employee view ──────────────────────────────────────────────
+
 const EMPTY_FORM = { type: 'casual', startDate: '', endDate: '', reason: '' };
 
-const Leaves = () => {
+const EmployeeLeaves = () => {
   const [leaves, setLeaves]         = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
@@ -42,11 +47,9 @@ const Leaves = () => {
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      setError(null);
       try {
-        const result = await getMyLeaves();
-        setLeaves(result.data?.leaves || result.data || []);
+        const res = await getMyLeaves();
+        setLeaves(res.data?.leaves || res.data || []);
       } catch (err) {
         setError(err?.message || 'Unable to load leave history.');
       } finally {
@@ -65,10 +68,7 @@ const Leaves = () => {
     const { name, value } = e.target;
     setForm((f) => {
       const next = { ...f, [name]: value };
-      // Keep endDate >= startDate when startDate changes
-      if (name === 'startDate' && next.endDate && next.endDate < value) {
-        next.endDate = value;
-      }
+      if (name === 'startDate' && next.endDate && next.endDate < value) next.endDate = value;
       return next;
     });
   };
@@ -77,24 +77,18 @@ const Leaves = () => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
-
-    if (!form.startDate)                  { setError('Select a start date.'); return; }
-    if (!form.endDate)                    { setError('Select an end date.'); return; }
-    if (form.startDate < TODAY)           { setError('Start date must be today or later.'); return; }
-    if (form.endDate < form.startDate)    { setError('End date cannot be before start date.'); return; }
-    if (!form.reason.trim())              { setError('Please provide a reason.'); return; }
+    if (!form.startDate)               { setError('Select a start date.'); return; }
+    if (!form.endDate)                 { setError('Select an end date.'); return; }
+    if (form.startDate < TODAY)        { setError('Start date must be today or later.'); return; }
+    if (form.endDate < form.startDate) { setError('End date cannot be before start date.'); return; }
+    if (!form.reason.trim())           { setError('Please provide a reason.'); return; }
 
     setSubmitting(true);
     try {
-      const result = await applyLeave({
-        type:      form.type,
-        startDate: form.startDate,
-        endDate:   form.endDate,
-        reason:    form.reason,
-      });
+      const res = await applyLeave({ type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason });
       const days = countDays(form.startDate, form.endDate);
       setSuccess(`Leave request submitted for ${days} day${days !== 1 ? 's' : ''}. Awaiting manager approval.`);
-      setLeaves((l) => [(result.data?.leave || result.data || result), ...l]);
+      setLeaves((l) => [(res.data?.leave || res.data || res), ...l]);
       setForm(EMPTY_FORM);
     } catch (err) {
       setError(err?.message || 'Unable to apply for leave.');
@@ -115,13 +109,11 @@ const Leaves = () => {
         <span className="tag tag-secondary">{leaves.length} total</span>
       </div>
 
-      {/* Form */}
       <div className="card">
         <div className="card-header">
           <h2 className="card-title">Apply for Leave</h2>
           <p className="card-subtitle">Requests require manager approval. Plan ahead — apply at least a day in advance.</p>
         </div>
-
         {error   && <div className="alert alert-error"   role="alert">{error}</div>}
         {success && <div className="alert alert-success" role="status">{success}</div>}
 
@@ -129,57 +121,30 @@ const Leaves = () => {
           <label className="form-label">
             Leave Type
             <select name="type" className="form-input" value={form.type} onChange={handleChange}>
-              {LEAVE_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
+              {LEAVE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </label>
 
           <div className="form-row-2">
             <label className="form-label">
               Start Date
-              <input
-                name="startDate"
-                type="date"
-                className="form-input"
-                value={form.startDate}
-                onChange={handleChange}
-                min={TODAY}
-                required
-              />
+              <input name="startDate" type="date" className="form-input"
+                value={form.startDate} onChange={handleChange} min={TODAY} required />
               <span className="form-hint">Today or later only.</span>
             </label>
-
             <label className="form-label">
               End Date
-              <input
-                name="endDate"
-                type="date"
-                className="form-input"
-                value={form.endDate}
-                onChange={handleChange}
-                min={form.startDate || TODAY}
-                required
-              />
-              {days > 0 && (
-                <span className="form-hint form-hint--info">
-                  {days} day{days !== 1 ? 's' : ''}
-                </span>
-              )}
+              <input name="endDate" type="date" className="form-input"
+                value={form.endDate} onChange={handleChange} min={form.startDate || TODAY} required />
+              {days > 0 && <span className="form-hint form-hint--info">{days} day{days !== 1 ? 's' : ''}</span>}
             </label>
           </div>
 
           <label className="form-label">
             Reason
-            <textarea
-              name="reason"
-              className="form-input"
-              rows="3"
-              value={form.reason}
-              onChange={handleChange}
-              placeholder="Briefly describe your reason for leave…"
-              required
-            />
+            <textarea name="reason" className="form-input" rows="3"
+              value={form.reason} onChange={handleChange}
+              placeholder="Briefly describe your reason for leave…" required />
           </label>
 
           <div className="form-actions">
@@ -190,18 +155,9 @@ const Leaves = () => {
         </form>
       </div>
 
-      {/* History */}
       <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">Leave History</h2>
-        </div>
-
-        {loading && (
-          <div className="skeleton-list">
-            {[1, 2, 3].map((i) => <div key={i} className="skeleton-item" />)}
-          </div>
-        )}
-
+        <div className="card-header"><h2 className="card-title">Leave History</h2></div>
+        {loading && <div className="skeleton-list">{[1,2,3].map((i) => <div key={i} className="skeleton-item" />)}</div>}
         {!loading && leaves.length === 0 && (
           <div className="empty-state">
             <div className="empty-state-icon">🗓️</div>
@@ -209,28 +165,24 @@ const Leaves = () => {
             <div className="empty-state-sub">Your leave history will appear here once you apply.</div>
           </div>
         )}
-
         {!loading && leaves.length > 0 && (
           <div className="list-grid">
             {leaves.map((leave) => {
               const d = countDays(leave.startDate, leave.endDate);
               return (
-                <div key={leave._id || `${leave.startDate}-${leave.endDate}`} className="list-item">
+                <div key={leave._id} className="list-item">
                   <div className="list-row">
                     <div className="list-item-main">
-                      <span className="list-title">
-                        {LEAVE_TYPES.find((t) => t.value === leave.type)?.label || leave.type}
-                      </span>
+                      <span className="list-title">{leaveLabel(leave.type)}</span>
                       <span className="list-meta">
                         {new Date(leave.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                         {' → '}
                         {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        {' · '}
-                        {d} day{d !== 1 ? 's' : ''}
+                        {' · '}{d} day{d !== 1 ? 's' : ''}
                       </span>
                     </div>
                     <span className={`tag ${STATUS_TAG[leave.status] || 'tag-pending'}`}>
-                      {STATUS_LABEL[leave.status] || leave.status || 'Pending'}
+                      {STATUS_LABEL[leave.status] || 'Pending'}
                     </span>
                   </div>
                   {leave.reason && <p className="list-desc">{leave.reason}</p>}
@@ -247,6 +199,136 @@ const Leaves = () => {
       </div>
     </div>
   );
+};
+
+// ── HR / Admin / Manager review view ──────────────────────────
+
+const ReviewActions = ({ onApprove, onReject, busy }) => (
+  <div className="review-actions">
+    <button className="btn btn-success btn-sm" onClick={onApprove} disabled={busy}>Approve</button>
+    <button className="btn btn-danger  btn-sm" onClick={onReject}  disabled={busy}>Reject</button>
+    {busy && <span className="list-meta">Saving…</span>}
+  </div>
+);
+
+const ManagementLeaves = () => {
+  const [leaves, setLeaves]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
+  const [reviewing, setReviewing] = useState(null);
+  const [filter, setFilter]       = useState('pending');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getAllLeaves();
+      setLeaves(res.data?.leaves || res.data || []);
+    } catch (err) {
+      setError(err?.message || 'Unable to load leave requests.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleReview = async (id, status) => {
+    setReviewing(id);
+    try {
+      await reviewLeave(id, status);
+      setLeaves((prev) => prev.map((l) => l._id === id ? { ...l, status } : l));
+    } catch (err) {
+      setError(err?.message || 'Review action failed.');
+    } finally {
+      setReviewing(null);
+    }
+  };
+
+  const isPending = (l) => l.status === 'pending_manager' || l.status === 'pending_hr';
+  const visible = filter === 'pending' ? leaves.filter(isPending) : leaves;
+  const pendingCount = leaves.filter(isPending).length;
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Leave Requests</h1>
+          <p className="page-description">Review and action leave requests submitted by employees.</p>
+        </div>
+        {pendingCount > 0 && <span className="tag tag-pending">{pendingCount} pending</span>}
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      <div className="card">
+        <div className="card-header">
+          <div className="rbac-filter-row">
+            <button className={`btn btn-sm ${filter === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFilter('pending')}>Pending ({pendingCount})</button>
+            <button className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFilter('all')}>All ({leaves.length})</button>
+          </div>
+        </div>
+
+        {loading && <div className="skeleton-list">{[1,2,3].map((i) => <div key={i} className="skeleton-item" />)}</div>}
+
+        {!loading && visible.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-state-icon">✓</div>
+            <div className="empty-state-title">All clear</div>
+            <div className="empty-state-sub">No {filter === 'pending' ? 'pending' : ''} leave requests to review.</div>
+          </div>
+        )}
+
+        {!loading && visible.length > 0 && (
+          <div className="list-grid">
+            {visible.map((leave) => {
+              const d = countDays(leave.startDate, leave.endDate);
+              return (
+                <div key={leave._id} className="list-item">
+                  <div className="list-row">
+                    <div className="list-item-main">
+                      <span className="list-title">{leave.userId?.fullName || 'Employee'}</span>
+                      <span className="list-meta">
+                        {leaveLabel(leave.type)} · {d} day{d !== 1 ? 's' : ''} ·{' '}
+                        {new Date(leave.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        {' → '}
+                        {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                    <span className={`tag ${STATUS_TAG[leave.status] || 'tag-pending'}`}>
+                      {STATUS_LABEL[leave.status] || leave.status}
+                    </span>
+                  </div>
+                  {leave.reason && <p className="list-desc">{leave.reason}</p>}
+                  {isPending(leave) && (
+                    <ReviewActions
+                      onApprove={() => handleReview(leave._id, 'approved')}
+                      onReject={() => handleReview(leave._id, 'rejected')}
+                      busy={reviewing === leave._id}
+                    />
+                  )}
+                  {leave.reviewComment && (
+                    <p className="list-desc" style={{ fontStyle: 'italic', color: 'var(--subtle)' }}>
+                      Comment: "{leave.reviewComment}"
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Root export: picks the right view by role ──────────────────
+
+const Leaves = () => {
+  const role = useRole();
+  return isEmployeeRole(role) ? <EmployeeLeaves /> : <ManagementLeaves />;
 };
 
 export default Leaves;

@@ -410,10 +410,39 @@ select.form-input { cursor: pointer; }
 }
 .btn-secondary:hover:not(:disabled) { background: #e2e8f0; }
 
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+  box-shadow: 0 4px 14px rgba(239,68,68,0.35);
+  transform: translateY(-1px);
+}
+
+.btn-sm {
+  padding: 5px 13px;
+  font-size: 12px;
+}
+
 .btn-disabled {
   background: var(--border);
   color: var(--subtle);
   cursor: not-allowed;
+}
+
+/* ─── RBAC Review UI ─────────────────────────────────────── */
+.review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.rbac-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ─── Tags / Badges ──────────────────────────────────────── */

@@ -93,7 +93,7 @@ const LiveMap = ({ markers }) => {
   );
 };
 
-const PRIVILEGED_ROLES = new Set(['super_admin', 'admin', 'manager', 'hr']);
+const ADMIN_ROLES = new Set(['super_admin', 'admin']);
 
 const Dashboard = () => {
   const [data, setData] = useState(null);
@@ -103,14 +103,16 @@ const Dashboard = () => {
   const prevMarkersRef = useRef(null);
   const intervalRef = useRef(null);
   const role = localStorage.getItem('role') || 'employee';
-  const isAdmin = PRIVILEGED_ROLES.has(role);
+  const isAdmin = ADMIN_ROLES.has(role);
+  const isHR = role === 'hr';
+  const isPrivileged = isAdmin || isHR;
 
   useEffect(() => {
     const fetchDashboard = async () => {
       setLoading(true);
       setError(null);
       try {
-        const result = isAdmin ? await getAdminDashboard() : await getMyDashboard();
+        const result = isPrivileged ? await getAdminDashboard() : await getMyDashboard();
         setData(result.data || result);
       } catch (err) {
         setError(err?.message || 'Unable to load dashboard.');
@@ -119,7 +121,7 @@ const Dashboard = () => {
       }
     };
     fetchDashboard();
-  }, [isAdmin]);
+  }, [isPrivileged]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -143,22 +145,26 @@ const Dashboard = () => {
     return () => clearInterval(intervalRef.current);
   }, [isAdmin]);
 
+  const title = isAdmin ? 'Admin Dashboard' : isHR ? 'HR Dashboard' : 'My Dashboard';
+  const subtitle = isAdmin
+    ? 'Overview of employees, attendance, claims and active field trips.'
+    : isHR
+    ? 'People overview — attendance, leaves and pending approvals.'
+    : 'Your attendance summary, claims and leave balance.';
+
   return (
     <div className="page page-dashboard">
       <div className="page-header">
         <div>
-          <h1 className="page-title">{isAdmin ? 'Admin Dashboard' : 'My Dashboard'}</h1>
-          <p className="page-description">
-            {isAdmin
-              ? 'Overview of employees, attendance, claims and active field trips.'
-              : 'Your attendance summary, claims and leave balance.'}
-          </p>
+          <h1 className="page-title">{title}</h1>
+          <p className="page-description">{subtitle}</p>
         </div>
       </div>
 
       {loading && <div className="page-message">Loading dashboard…</div>}
       {error && <div className="alert alert-error">{error}</div>}
 
+      {/* Admin / Super Admin: full stats + live map */}
       {data && isAdmin && (
         <div className="grid cards-grid">
           <div className="card stat-card blue">
@@ -184,7 +190,30 @@ const Dashboard = () => {
         </div>
       )}
 
-      {data && !isAdmin && (
+      {/* HR: people-focused stats, no live map */}
+      {data && isHR && (
+        <div className="grid cards-grid">
+          <div className="card stat-card blue">
+            <span className="stat-label">Total Employees</span>
+            <span className="stat-value">{data.totalEmployees ?? 0}</span>
+          </div>
+          <div className="card stat-card green">
+            <span className="stat-label">Present Today</span>
+            <span className="stat-value">{data.presentToday ?? 0}</span>
+          </div>
+          <div className="card stat-card amber">
+            <span className="stat-label">On Leave</span>
+            <span className="stat-value">{data.onLeave ?? data.onLeaveToday ?? 0}</span>
+          </div>
+          <div className="card stat-card purple">
+            <span className="stat-label">Pending Approvals</span>
+            <span className="stat-value">{data.pendingClaims ?? 0}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Employee / Manager: personal stats */}
+      {data && !isPrivileged && (
         <div className="grid cards-grid">
           <div className="card stat-card sky">
             <span className="stat-label">Today's Status</span>
@@ -213,6 +242,7 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Live map: admin only */}
       {isAdmin && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div

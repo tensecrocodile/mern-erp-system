@@ -14,8 +14,8 @@ const router = express.Router();
 
 router.use(protect);
 
-router.post("/check-in",  authorize(...Object.values(USER_ROLES)), validateCheckIn,  attendanceController.checkIn);
-router.post("/check-out", authorize(...Object.values(USER_ROLES)), validateCheckOut, attendanceController.checkOut);
+router.post("/check-in",  authorize(USER_ROLES.EMPLOYEE, USER_ROLES.MANAGER), validateCheckIn,  attendanceController.checkIn);
+router.post("/check-out", authorize(USER_ROLES.EMPLOYEE, USER_ROLES.MANAGER), validateCheckOut, attendanceController.checkOut);
 
 router.get("/logs",    validateAttendanceLogs,    attendanceController.getLogs);
 router.get("/summary", validateAttendanceSummary, attendanceController.getSummary);
