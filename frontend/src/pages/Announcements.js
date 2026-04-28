@@ -15,7 +15,7 @@ const AUDIENCE_OPTIONS = [
 
 const Announcements = () => {
   const role = localStorage.getItem('role');
-  const isPrivileged = role === 'admin' || role === 'manager' || role === 'hr';
+  const isPrivileged = ['super_admin', 'admin', 'hr', 'manager'].includes(role);
 
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -247,7 +247,7 @@ const Announcements = () => {
                         Publish Now
                       </button>
                     )}
-                    {role === 'admin' && (
+                    {['super_admin', 'admin'].includes(role) && (
                       <button
                         className="btn btn-secondary"
                         style={{ padding: '4px 12px', fontSize: 12, color: '#ef4444', borderColor: '#fecaca' }}

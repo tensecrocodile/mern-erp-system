@@ -28,10 +28,10 @@ const Login = () => {
     <div className="page-center">
       <div className="card auth-card">
         <div className="auth-logo-wrap">
-          <div className="auth-logo">E</div>
+          <div className="auth-logo">GW</div>
         </div>
-        <h1 className="auth-heading">Welcome back</h1>
-        <p className="auth-sub">Sign in to access your ERP dashboard.</p>
+        <h1 className="auth-heading">GeoWorkforce</h1>
+        <p className="auth-sub">Sign in to access your workforce dashboard.</p>
 
         <form className="form-grid" onSubmit={handleSubmit}>
           <label className="form-label">

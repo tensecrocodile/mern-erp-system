@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import ProtectedRoute from './components/ProtectedRoute';
+import Sidebar from './components/layout/Sidebar';
+import Topbar from './components/layout/Topbar';
+import ProtectedRoute from './components/common/ProtectedRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import GeoAttendance from './pages/GeoAttendance';
@@ -14,18 +16,30 @@ import Notifications from './pages/Notifications';
 import Announcements from './pages/Announcements';
 import Payslips from './pages/Payslips';
 import Profile from './pages/Profile';
+import GeoFenceManager from './pages/GeoFenceManager';
+import Attendance from './pages/Attendance';
+import Employees from './pages/Employees';
+import TripsLive from './pages/TripsLive';
 import './App.css';
 
-const Layout = () => (
-  <div className="app-layout">
-    <Navbar />
-    <div className="content-area">
-      <main className="page-main">
-        <Outlet />
-      </main>
+const Layout = () => {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  return (
+    <div className={`app-layout${sidebarCollapsed ? ' app-layout--collapsed' : ''}`}>
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((v) => !v)}
+      />
+      <div className="app-main">
+        <Topbar onToggleSidebar={() => setSidebarCollapsed((v) => !v)} />
+        <main className="page-main">
+          <Outlet />
+        </main>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const App = () => (
   <div className="app-shell">
@@ -38,13 +52,17 @@ const App = () => (
           <Route path="/claims"        element={<Claims />}        />
           <Route path="/leaves"        element={<Leaves />}        />
           <Route path="/holidays"      element={<Holidays />}      />
-          <Route path="/meetings"       element={<Meetings />}       />
+          <Route path="/meetings"      element={<Meetings />}      />
           <Route path="/daily-reports" element={<DailyReports />}  />
           <Route path="/approvals"     element={<Approvals />}     />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/announcements" element={<Announcements />} />
           <Route path="/payslips"      element={<Payslips />}      />
           <Route path="/profile"       element={<Profile />}       />
+          <Route path="/attendance"     element={<Attendance />}      />
+          <Route path="/employees"     element={<Employees />}       />
+          <Route path="/geofences"     element={<GeoFenceManager />} />
+          <Route path="/trips-live"    element={<TripsLive />}       />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Route>

@@ -39,12 +39,31 @@ const claimSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: Object.values(CLAIM_STATUS),
-      default: CLAIM_STATUS.PENDING,
+      default: CLAIM_STATUS.PENDING_MANAGER,
       index: true,
+    },
+    managerReviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    managerReviewedAt: {
+      type: Date,
+      default: null,
+    },
+    managerComment: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: "",
     },
     reviewedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      default: null,
+    },
+    reviewedAt: {
+      type: Date,
       default: null,
     },
     reviewComment: {

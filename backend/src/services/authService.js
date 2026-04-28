@@ -12,20 +12,30 @@ function normalizeRegistrationPayload(payload) {
     employeeId: payload.employeeId ? payload.employeeId.trim().toUpperCase() : undefined,
     role: payload.role || USER_ROLES.EMPLOYEE,
     workMode: payload.workMode || WORK_MODES.FIELD,
+    managerId: payload.managerId || null,
     assignedGeoFences: Array.isArray(payload.assignedGeoFences) ? payload.assignedGeoFences : [],
   };
 }
 
 function resolveRoleForRegistration({ requester, requestedRole, existingUserCount }) {
   if (existingUserCount === 0) {
-    return USER_ROLES.ADMIN;
+    return USER_ROLES.SUPER_ADMIN;
   }
 
   if (!requester) {
-    throw new ApiError(403, "Registration is restricted to authenticated admins or HR users.");
+    throw new ApiError(403, "Registration is restricted to authenticated administrators.");
   }
 
-  if (![USER_ROLES.ADMIN, USER_ROLES.HR].includes(requester.role)) {
+  // Only super_admin can create another super_admin
+  if (requestedRole === USER_ROLES.SUPER_ADMIN) {
+    if (requester.role !== USER_ROLES.SUPER_ADMIN) {
+      throw new ApiError(403, "Only super admins can create super admin accounts.");
+    }
+
+    return USER_ROLES.SUPER_ADMIN;
+  }
+
+  if (![USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.HR].includes(requester.role)) {
     throw new ApiError(403, "You do not have permission to register new users.");
   }
 
@@ -33,7 +43,7 @@ function resolveRoleForRegistration({ requester, requestedRole, existingUserCoun
     throw new ApiError(403, "HR users can only create employee accounts.");
   }
 
-  return requestedRole;
+  return requestedRole || USER_ROLES.EMPLOYEE;
 }
 
 async function ensureUniqueUser({ email, employeeId }) {

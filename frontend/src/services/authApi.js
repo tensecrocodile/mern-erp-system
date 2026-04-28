@@ -6,15 +6,11 @@ export const login = async (email, password) => {
     password,
   });
 
-  const token = response.data?.data?.accessToken;
-  const role = response.data?.data?.user?.role;
+  const { accessToken, user } = response.data?.data ?? {};
 
-  if (token) {
-    localStorage.setItem('token', token);
-  }
-  if (role) {
-    localStorage.setItem('role', role);
-  }
+  if (accessToken) localStorage.setItem('token', accessToken);
+  if (user?.role)  localStorage.setItem('role', user.role);
+  if (user?.fullName) localStorage.setItem('name', user.fullName);
 
   return response.data;
 };

@@ -1,4 +1,4 @@
-const { body, param, validationResult } = require("express-validator");
+const { body, param, query, validationResult } = require("express-validator");
 
 const ApiError = require("../utils/apiError");
 const {
@@ -213,7 +213,7 @@ const validateClaimSubmission = makeValidator([
 
 const validateClaimReview = makeValidator([
   body("status")
-    .isIn([CLAIM_STATUS.APPROVED, CLAIM_STATUS.REJECTED])
+    .isIn(["approved", "rejected"])
     .withMessage("status must be either approved or rejected."),
   body("comment")
     .optional({ values: "falsy" })
@@ -283,7 +283,7 @@ const validateLeaveSubmission = makeValidator([
 
 const validateLeaveReview = makeValidator([
   body("status")
-    .isIn([LEAVE_STATUS.APPROVED, LEAVE_STATUS.REJECTED])
+    .isIn(["approved", "rejected"])
     .withMessage("status must be either approved or rejected."),
   body("comment")
     .optional({ values: "falsy" })
@@ -414,6 +414,174 @@ const validatePayslipUpload = makeValidator([
     .withMessage("fileUrl must be a valid URL."),
 ]);
 
+const validateGeofenceIdParam = makeValidator([
+  param("id")
+    .isMongoId()
+    .withMessage("id must be a valid MongoDB ObjectId."),
+]);
+
+const validateTrackingUpdate = makeValidator([
+  body("lat")
+    .isFloat({ min: -90, max: 90 })
+    .withMessage("lat must be a number between -90 and 90."),
+  body("lng")
+    .isFloat({ min: -180, max: 180 })
+    .withMessage("lng must be a number between -180 and 180."),
+  body("accuracy")
+    .isFloat({ min: 0 })
+    .withMessage("accuracy must be a non-negative number."),
+  body("timestamp")
+    .isISO8601()
+    .withMessage("timestamp must be a valid ISO date string."),
+  body("deviceId")
+    .optional({ values: "falsy" })
+    .isString()
+    .isLength({ max: 200 })
+    .withMessage("deviceId must be a string up to 200 characters."),
+]);
+
+const validateAttendanceIdParam = makeValidator([
+  param("attendanceId")
+    .isMongoId()
+    .withMessage("attendanceId must be a valid MongoDB ObjectId."),
+]);
+
+const validateUserIdParam = makeValidator([
+  param("id").isMongoId().withMessage("id must be a valid MongoDB ObjectId."),
+]);
+
+const validateSetStatus = makeValidator([
+  body("isActive").isBoolean().withMessage("isActive must be true or false."),
+]);
+
+const validateAssignUsers = makeValidator([
+  body("userIds")
+    .isArray()
+    .withMessage("userIds must be an array of MongoDB ObjectIds."),
+  body("userIds.*")
+    .isMongoId()
+    .withMessage("Each entry in userIds must be a valid MongoDB ObjectId."),
+]);
+
+const validateAttendanceLogs = makeValidator([
+  query("limit")
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage("limit must be an integer between 1 and 100."),
+]);
+
+const validateAttendanceSummary = makeValidator([
+  query("month")
+    .optional()
+    .matches(/^\d{4}-\d{2}$/)
+    .withMessage("month must be in YYYY-MM format."),
+]);
+
+const validateGeofenceCreate = makeValidator([
+  body("name")
+    .trim()
+    .notEmpty()
+    .withMessage("name is required.")
+    .isLength({ max: 120 })
+    .withMessage("name must be at most 120 characters."),
+  body("type")
+    .optional()
+    .isIn(["circle", "polygon"])
+    .withMessage("type must be circle or polygon."),
+  body("color")
+    .optional({ values: "falsy" })
+    .isString()
+    .isLength({ max: 20 })
+    .withMessage("color must be a string up to 20 characters."),
+  body("description")
+    .optional({ values: "falsy" })
+    .isString()
+    .isLength({ max: 300 })
+    .withMessage("description must be at most 300 characters."),
+  body("isActive")
+    .optional()
+    .isBoolean()
+    .withMessage("isActive must be a boolean."),
+  body("companyId")
+    .optional({ values: "falsy" })
+    .isMongoId()
+    .withMessage("companyId must be a valid MongoDB ObjectId."),
+  // Circle fields
+  body("center.latitude")
+    .if(body("type").equals("circle"))
+    .isFloat({ min: -90, max: 90 })
+    .withMessage("center.latitude must be between -90 and 90."),
+  body("center.longitude")
+    .if(body("type").equals("circle"))
+    .isFloat({ min: -180, max: 180 })
+    .withMessage("center.longitude must be between -180 and 180."),
+  body("radius")
+    .if(body("type").equals("circle"))
+    .isFloat({ min: 1, max: 50000 })
+    .withMessage("radius must be between 1 and 50000 meters."),
+  // Polygon fields
+  body("polygon")
+    .if(body("type").equals("polygon"))
+    .isArray({ min: 3 })
+    .withMessage("polygon must be an array of at least 3 points."),
+  body("polygon.*.lat")
+    .if(body("type").equals("polygon"))
+    .isFloat({ min: -90, max: 90 })
+    .withMessage("Each polygon point lat must be between -90 and 90."),
+  body("polygon.*.lng")
+    .if(body("type").equals("polygon"))
+    .isFloat({ min: -180, max: 180 })
+    .withMessage("Each polygon point lng must be between -180 and 180."),
+]);
+
+const validateGeofenceUpdate = makeValidator([
+  body("name")
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage("name cannot be empty.")
+    .isLength({ max: 120 })
+    .withMessage("name must be at most 120 characters."),
+  body("color")
+    .optional({ values: "falsy" })
+    .isString()
+    .isLength({ max: 20 })
+    .withMessage("color must be at most 20 characters."),
+  body("description")
+    .optional({ values: "falsy" })
+    .isString()
+    .isLength({ max: 300 })
+    .withMessage("description must be at most 300 characters."),
+  body("isActive")
+    .optional()
+    .isBoolean()
+    .withMessage("isActive must be a boolean."),
+  body("radius")
+    .optional()
+    .isFloat({ min: 1, max: 50000 })
+    .withMessage("radius must be between 1 and 50000 meters."),
+  body("center.latitude")
+    .optional()
+    .isFloat({ min: -90, max: 90 })
+    .withMessage("center.latitude must be between -90 and 90."),
+  body("center.longitude")
+    .optional()
+    .isFloat({ min: -180, max: 180 })
+    .withMessage("center.longitude must be between -180 and 180."),
+  body("polygon")
+    .optional()
+    .isArray({ min: 3 })
+    .withMessage("polygon must have at least 3 points."),
+  body("polygon.*.lat")
+    .optional()
+    .isFloat({ min: -90, max: 90 })
+    .withMessage("polygon point lat must be between -90 and 90."),
+  body("polygon.*.lng")
+    .optional()
+    .isFloat({ min: -180, max: 180 })
+    .withMessage("polygon point lng must be between -180 and 180."),
+]);
+
 const validateAnnouncementCreation = makeValidator([
   body("title")
     .trim()
@@ -447,12 +615,22 @@ const validateAnnouncementCreation = makeValidator([
 
 module.exports = {
   validateAnnouncementCreation,
+  validateAssignUsers,
+  validateAttendanceIdParam,
+  validateAttendanceLogs,
+  validateAttendanceSummary,
+  validateSetStatus,
+  validateTrackingUpdate,
+  validateUserIdParam,
   validateCheckIn,
   validateCheckOut,
   validateClaimIdParam,
   validateClaimReview,
   validateClaimSubmission,
   validateDailyReportSubmission,
+  validateGeofenceCreate,
+  validateGeofenceIdParam,
+  validateGeofenceUpdate,
   validateHolidayCreation,
   validateHolidayIdParam,
   validateLeaveIdParam,

@@ -49,7 +49,7 @@ app.use(
   cors({
     origin: process.env.CORS_ORIGIN
       ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
-      : true,
+      : process.env.NODE_ENV === "production" ? false : true,
     credentials: true,
   })
 );

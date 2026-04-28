@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-le
 import L from 'leaflet';
 import { calculateDistance, isUserInsideGeoFence } from '../utils/geo';
 import { checkIn, checkOut } from '../services/attendanceApi';
+import { getMyGeofences } from '../services/geoFenceApi';
 import './GeoAttendance.css';
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -12,13 +13,9 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
 
-const DEFAULT_GEO_FENCE = {
-  lat: 28.6139,
-  lng: 77.209,
-  radius: 120,
-};
-
 const SELFIE_PLACEHOLDER = 'https://placehold.co/400x400?text=Selfie+Unavailable';
+
+const DEFAULT_MAP_CENTER = { lat: 20.5937, lng: 78.9629 }; // India centre fallback
 
 const MapController = ({ position }) => {
   const map = useMap();
@@ -31,26 +28,54 @@ const MapController = ({ position }) => {
 };
 
 const GeoAttendance = () => {
+  const [fences, setFences] = useState([]);
+  const [fencesLoading, setFencesLoading] = useState(true);
+  const [fencesError, setFencesError] = useState(null);
+
   const [userLocation, setUserLocation] = useState(null);
   const [accuracy, setAccuracy] = useState(0);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [loadingAction, setLoadingAction] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  // null = unknown, 'in' = checked in, 'out' = checked out / not checked in
   const [attendanceStatus, setAttendanceStatus] = useState(null);
 
-  // Determine current attendance session from today's dashboard data
   useEffect(() => {
-    // We only show the status once the user gets location — no pre-fetch needed
+    getMyGeofences()
+      .then((res) => setFences(res.data?.geofences ?? []))
+      .catch(() => setFencesError('Could not load your assigned geofence. Contact your admin.'))
+      .finally(() => setFencesLoading(false));
   }, []);
 
+  // Primary fence for map display (first circle fence, or first fence overall)
+  const primaryFence = useMemo(() => {
+    if (fences.length === 0) return null;
+    return fences.find((f) => f.type === 'circle') ?? fences[0];
+  }, [fences]);
+
+  const mapCenter = useMemo(() => {
+    if (primaryFence?.type === 'circle' && primaryFence.center?.latitude) {
+      return { lat: primaryFence.center.latitude, lng: primaryFence.center.longitude };
+    }
+    return DEFAULT_MAP_CENTER;
+  }, [primaryFence]);
+
   const locationStatus = useMemo(() => {
-    if (!userLocation) return null;
-    const distance = Math.round(calculateDistance(userLocation, DEFAULT_GEO_FENCE));
-    const inside = isUserInsideGeoFence(userLocation, DEFAULT_GEO_FENCE, DEFAULT_GEO_FENCE.radius);
-    return { distance, isInside: inside };
-  }, [userLocation]);
+    if (!userLocation || !primaryFence) return null;
+
+    if (primaryFence.type === 'circle' && primaryFence.center?.latitude) {
+      const fenceCenter = {
+        lat: primaryFence.center.latitude,
+        lng: primaryFence.center.longitude,
+      };
+      const distance = Math.round(calculateDistance(userLocation, fenceCenter));
+      const inside = isUserInsideGeoFence(userLocation, fenceCenter, primaryFence.radius);
+      return { distance, isInside: inside };
+    }
+
+    // Polygon fences — distance not calculable on frontend; backend enforces on check-in
+    return { distance: null, isInside: null };
+  }, [userLocation, primaryFence]);
 
   const getLocationErrorMessage = useCallback((geoError) => {
     if (geoError.code === geoError.PERMISSION_DENIED) return 'Location permission denied. Allow location access in your browser.';
@@ -85,7 +110,7 @@ const GeoAttendance = () => {
   }, [getLocationErrorMessage]);
 
   const handleCheckIn = useCallback(async () => {
-    if (!locationStatus?.isInside) {
+    if (primaryFence?.type === 'circle' && !locationStatus?.isInside) {
       setError('You must be inside the geo-fence area to check in.');
       return;
     }
@@ -102,7 +127,6 @@ const GeoAttendance = () => {
       setSuccess('Check-in successful!');
       setAttendanceStatus('in');
     } catch (err) {
-      // 409 means already checked in — update UI to reflect actual state
       if (err?.message?.includes('already have an active')) {
         setAttendanceStatus('in');
       }
@@ -110,7 +134,7 @@ const GeoAttendance = () => {
     } finally {
       setLoadingAction(false);
     }
-  }, [locationStatus, userLocation, accuracy]);
+  }, [locationStatus, userLocation, accuracy, primaryFence]);
 
   const handleCheckOut = useCallback(async () => {
     if (!userLocation) {
@@ -136,21 +160,58 @@ const GeoAttendance = () => {
     }
   }, [userLocation, accuracy]);
 
+  const isCheckedIn = attendanceStatus === 'in';
+
   const statusLabel = locationStatus
-    ? locationStatus.isInside ? 'Inside Area ✅' : 'Outside Area ❌'
+    ? locationStatus.isInside === null
+      ? 'Location captured'
+      : locationStatus.isInside ? 'Inside Area ✅' : 'Outside Area ❌'
     : 'Get location to continue';
+
   const statusClass = locationStatus
-    ? locationStatus.isInside ? 'inside' : 'outside'
+    ? locationStatus.isInside === null
+      ? 'status-polygon'
+      : locationStatus.isInside ? 'inside' : 'outside'
     : 'status-empty';
 
-  const isCheckedIn = attendanceStatus === 'in';
+  const canCheckIn = userLocation && (locationStatus?.isInside !== false);
+
+  if (fencesLoading) {
+    return (
+      <div className="page page-geo">
+        <div className="page-header">
+          <h1 className="page-title">Geo Attendance</h1>
+        </div>
+        <div className="card geo-status-card">
+          <div className="status-badge status-empty">Loading your geofence…</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (fencesError || fences.length === 0) {
+    return (
+      <div className="page page-geo">
+        <div className="page-header">
+          <h1 className="page-title">Geo Attendance</h1>
+        </div>
+        <div className="card geo-status-card">
+          <div className="status-badge outside">
+            {fencesError || 'No geofence assigned. Please contact your administrator.'}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page page-geo">
       <div className="page-header">
         <div>
           <h1 className="page-title">Geo Attendance</h1>
-          <p className="page-description">Check your location and record your attendance.</p>
+          <p className="page-description">
+            {primaryFence ? `Zone: ${primaryFence.name}` : 'Check your location and record your attendance.'}
+          </p>
         </div>
         {attendanceStatus && (
           <span className={`tag ${isCheckedIn ? 'tag-optional' : 'tag-company'}`}>
@@ -163,40 +224,51 @@ const GeoAttendance = () => {
         <div className={`status-badge ${statusClass}`}>{statusLabel}</div>
         {locationStatus && (
           <div className="geo-stats">
-            <div className="stat-row">
-              <span>Distance</span>
-              <strong>{locationStatus.distance}m</strong>
-            </div>
+            {locationStatus.distance !== null && (
+              <div className="stat-row">
+                <span>Distance</span>
+                <strong>{locationStatus.distance}m</strong>
+              </div>
+            )}
             <div className="stat-row">
               <span>Accuracy</span>
               <strong>±{accuracy}m</strong>
             </div>
-            <div className="stat-row">
-              <span>Radius</span>
-              <strong>{DEFAULT_GEO_FENCE.radius}m</strong>
-            </div>
+            {primaryFence?.type === 'circle' && (
+              <div className="stat-row">
+                <span>Radius</span>
+                <strong>{primaryFence.radius}m</strong>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       <div className="geo-map-wrapper">
         <MapContainer
-          center={[DEFAULT_GEO_FENCE.lat, DEFAULT_GEO_FENCE.lng]}
+          center={[mapCenter.lat, mapCenter.lng]}
           zoom={16}
           scrollWheelZoom={false}
           className="geo-map"
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
-          <Circle
-            center={[DEFAULT_GEO_FENCE.lat, DEFAULT_GEO_FENCE.lng]}
-            radius={DEFAULT_GEO_FENCE.radius}
-            pathOptions={{
-              color: locationStatus?.isInside ? '#22c55e' : '#ef4444',
-              fillColor: locationStatus?.isInside ? '#22c55e' : '#ef4444',
-              fillOpacity: 0.18,
-              weight: 3,
-            }}
-          />
+          {fences.map((fence) =>
+            fence.type === 'circle' && fence.center?.latitude ? (
+              <Circle
+                key={fence._id}
+                center={[fence.center.latitude, fence.center.longitude]}
+                radius={fence.radius}
+                pathOptions={{
+                  color: fence.color || '#6366f1',
+                  fillColor: fence.color || '#6366f1',
+                  fillOpacity: 0.15,
+                  weight: 2,
+                }}
+              >
+                <Popup>{fence.name}</Popup>
+              </Circle>
+            ) : null
+          )}
           {userLocation && (
             <>
               <Marker position={[userLocation.lat, userLocation.lng]}>
@@ -226,10 +298,10 @@ const GeoAttendance = () => {
 
         {(!attendanceStatus || attendanceStatus === 'out') && (
           <button
-            className={`btn ${locationStatus?.isInside ? 'btn-success' : 'btn-disabled'}`}
+            className={`btn ${canCheckIn ? 'btn-success' : 'btn-disabled'}`}
             type="button"
             onClick={handleCheckIn}
-            disabled={!locationStatus?.isInside || loadingAction}
+            disabled={!canCheckIn || loadingAction}
           >
             {loadingAction ? 'Checking In…' : 'Check In'}
           </button>

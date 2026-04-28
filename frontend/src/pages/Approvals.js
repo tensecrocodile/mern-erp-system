@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getApprovals, reviewClaim, reviewLeave } from '../services/approvalsApi';
 
+const STAGE_LABELS = {
+  pending_manager: 'Manager Review',
+  pending_hr: 'HR Review',
+};
+
 const ReviewRow = ({ label, onApprove, onReject, disabled }) => (
   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
     <button
@@ -115,6 +120,11 @@ const Approvals = () => {
                       <span>₹{claim.amount}</span>
                       <span>{new Date(claim.date).toLocaleDateString()}</span>
                     </div>
+                    {claim.status && STAGE_LABELS[claim.status] && (
+                      <span className="tag tag-secondary" style={{ fontSize: 10, marginBottom: 4 }}>
+                        Stage: {STAGE_LABELS[claim.status]}
+                      </span>
+                    )}
                     <ReviewRow
                       onApprove={() => handleClaimReview(claim._id, 'approved')}
                       onReject={() => handleClaimReview(claim._id, 'rejected')}
@@ -149,6 +159,11 @@ const Approvals = () => {
                       <span>{new Date(leave.startDate).toLocaleDateString()}</span>
                       <span>→ {new Date(leave.endDate).toLocaleDateString()}</span>
                     </div>
+                    {leave.status && STAGE_LABELS[leave.status] && (
+                      <span className="tag tag-secondary" style={{ fontSize: 10, marginBottom: 4 }}>
+                        Stage: {STAGE_LABELS[leave.status]}
+                      </span>
+                    )}
                     <ReviewRow
                       onApprove={() => handleLeaveReview(leave._id, 'approved')}
                       onReject={() => handleLeaveReview(leave._id, 'rejected')}

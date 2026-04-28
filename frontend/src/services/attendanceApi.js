@@ -29,3 +29,14 @@ export const checkOut = async (location, selfieUrl) => {
 
   return response.data;
 };
+
+export const getMyLogs = async (limit = 30) => {
+  const response = await api.get('/attendance/logs', { params: { limit } });
+  return response.data;
+};
+
+export const getAttendanceSummary = async (month) => {
+  const params = month ? { month } : {};
+  const response = await api.get('/attendance/summary', { params });
+  return response.data;
+};

@@ -30,3 +30,27 @@ exports.checkOut = asyncHandler(async (req, res) => {
     },
   });
 });
+
+exports.getLogs = asyncHandler(async (req, res) => {
+  const logs = await attendanceService.getLogs({
+    userId: req.user._id,
+    limit: req.query.limit,
+  });
+
+  return sendSuccess(res, {
+    message: "Attendance logs retrieved.",
+    data: { logs },
+  });
+});
+
+exports.getSummary = asyncHandler(async (req, res) => {
+  const summary = await attendanceService.getSummary({
+    userId: req.user._id,
+    month: req.query.month,
+  });
+
+  return sendSuccess(res, {
+    message: "Attendance summary retrieved.",
+    data: { summary },
+  });
+});

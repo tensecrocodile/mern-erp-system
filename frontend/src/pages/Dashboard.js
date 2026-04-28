@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Circle, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getAdminDashboard, getMyDashboard, getLiveTrips } from '../services/dashboardApi';
+import { getAdminDashboard, getMyDashboard, getLiveTracking } from '../services/dashboardApi';
 
 const OFFICE = { lat: 28.6139, lng: 77.209 };
 const FENCE_RADIUS = 120;
@@ -93,6 +93,8 @@ const LiveMap = ({ markers }) => {
   );
 };
 
+const PRIVILEGED_ROLES = new Set(['super_admin', 'admin', 'manager', 'hr']);
+
 const Dashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -100,7 +102,8 @@ const Dashboard = () => {
   const [liveMarkers, setLiveMarkers] = useState([]);
   const prevMarkersRef = useRef(null);
   const intervalRef = useRef(null);
-  const isAdmin = localStorage.getItem('role') === 'admin';
+  const role = localStorage.getItem('role') || 'employee';
+  const isAdmin = PRIVILEGED_ROLES.has(role);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -123,8 +126,8 @@ const Dashboard = () => {
 
     const fetchLive = async () => {
       try {
-        const res = await getLiveTrips();
-        const fresh = res.data?.trips ?? [];
+        const res = await getLiveTracking();
+        const fresh = res.data?.logs ?? [];
         const serialized = JSON.stringify(fresh);
         if (serialized !== prevMarkersRef.current) {
           prevMarkersRef.current = serialized;

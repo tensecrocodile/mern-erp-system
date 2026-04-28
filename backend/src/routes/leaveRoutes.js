@@ -15,11 +15,11 @@ router.use(protect);
 
 router.post("/", validateLeaveSubmission, leaveController.applyLeave);
 router.get("/me", leaveController.getMyLeaves);
-router.get("/", authorize(USER_ROLES.ADMIN, USER_ROLES.MANAGER), leaveController.getAllLeaves);
+router.get("/", authorize(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.HR, USER_ROLES.MANAGER), leaveController.getAllLeaves);
 router.patch(
   "/:id/review",
   validateLeaveIdParam,
-  authorize(USER_ROLES.ADMIN, USER_ROLES.MANAGER),
+  authorize(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.HR, USER_ROLES.MANAGER),
   validateLeaveReview,
   leaveController.reviewLeave
 );

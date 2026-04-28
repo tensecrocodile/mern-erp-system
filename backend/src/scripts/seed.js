@@ -45,7 +45,7 @@ async function createUsers() {
     email: "admin@erp.demo",
     password: "Admin@123",
     employeeId: "ADM001",
-    role: USER_ROLES.ADMIN,
+    role: USER_ROLES.SUPER_ADMIN,
     workMode: WORK_MODES.FIELD,
     isActive: true,
   });
@@ -60,6 +60,26 @@ async function createUsers() {
     isActive: true,
   });
 
+  const manager = await User.create({
+    fullName: "Rajan Mehta",
+    email: "manager@erp.demo",
+    password: "Admin@123",
+    employeeId: "MGR001",
+    role: USER_ROLES.MANAGER,
+    workMode: WORK_MODES.OFFICE,
+    isActive: true,
+  });
+
+  const hr = await User.create({
+    fullName: "Sunita Rao",
+    email: "hr@erp.demo",
+    password: "Admin@123",
+    employeeId: "HR001",
+    role: USER_ROLES.HR,
+    workMode: WORK_MODES.OFFICE,
+    isActive: true,
+  });
+
   const employeeTwo = await User.create({
     fullName: "Priya Nair",
     email: "priya@erp.demo",
@@ -67,11 +87,17 @@ async function createUsers() {
     employeeId: "EMP002",
     role: USER_ROLES.EMPLOYEE,
     workMode: WORK_MODES.FIELD,
+    managerId: manager._id,
     isActive: true,
   });
 
+  // link employeeOne to manager
+  await User.findByIdAndUpdate(employeeOne._id, { managerId: manager._id });
+
   return {
     admin,
+    manager,
+    hr,
     employeeOne,
     employeeTwo,
   };
@@ -244,7 +270,7 @@ async function createClaim(employeeId, adminId) {
     date: getUtcStartOfDay(new Date()),
     description: "Taxi and parking expenses for client visit.",
     attachments: ["https://example.com/claims/travel-receipt-1.jpg"],
-    status: CLAIM_STATUS.PENDING,
+    status: CLAIM_STATUS.PENDING_MANAGER,
     reviewedBy: null,
     reviewComment: "",
   });

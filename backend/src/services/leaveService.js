@@ -33,30 +33,12 @@ function normalizeReason(reason) {
   return normalizedReason;
 }
 
-function normalizeReviewStatus(status) {
-  if (![LEAVE_STATUS.APPROVED, LEAVE_STATUS.REJECTED].includes(status)) {
-    throw new ApiError(400, "Review status must be either approved or rejected.");
-  }
-
-  return status;
-}
-
 function normalizeReviewComment(comment) {
   return typeof comment === "string" ? comment.trim() : "";
 }
 
-async function ensureReviewerCanReview(userId) {
-  const reviewer = await User.findById(userId).select("_id role isActive");
-
-  if (!reviewer || !reviewer.isActive) {
-    throw new ApiError(401, "Reviewing user is inactive or no longer exists.");
-  }
-
-  if (![USER_ROLES.ADMIN, USER_ROLES.MANAGER].includes(reviewer.role)) {
-    throw new ApiError(403, "You do not have permission to review leaves.");
-  }
-
-  return reviewer;
+async function getTeamUserIds(managerId) {
+  return User.find({ managerId }).distinct("_id");
 }
 
 async function applyLeave(userId, data) {
@@ -69,7 +51,7 @@ async function applyLeave(userId, data) {
 
   const overlappingLeave = await Leave.findOne({
     userId,
-    status: { $in: [LEAVE_STATUS.APPROVED, LEAVE_STATUS.PENDING] },
+    status: { $in: [LEAVE_STATUS.APPROVED, LEAVE_STATUS.PENDING_MANAGER, LEAVE_STATUS.PENDING_HR] },
     startDate: { $lte: endDate },
     endDate: { $gte: startDate },
   });
@@ -85,7 +67,7 @@ async function applyLeave(userId, data) {
     startDate,
     endDate,
     reason: normalizeReason(data.reason),
-    status: LEAVE_STATUS.PENDING,
+    status: LEAVE_STATUS.PENDING_MANAGER,
     reviewedBy: null,
     reviewComment: "",
   });
@@ -99,7 +81,7 @@ async function getUserLeaves(userId) {
   return leaves.map((leave) => leave.toJSON());
 }
 
-async function getAllLeaves(filters = {}) {
+async function getAllLeaves(requesterId, requesterRole, filters = {}) {
   const query = {};
 
   if (filters.status !== undefined) {
@@ -110,29 +92,70 @@ async function getAllLeaves(filters = {}) {
     query.status = filters.status;
   }
 
+  if (requesterRole === USER_ROLES.MANAGER) {
+    const teamUserIds = await getTeamUserIds(requesterId);
+    query.userId = { $in: teamUserIds };
+  }
+
   const leaves = await Leave.find(query)
     .populate("userId", "fullName email employeeId role")
+    .populate("managerReviewedBy", "fullName email role")
     .populate("reviewedBy", "fullName email role")
     .sort({ createdAt: -1 });
 
   return leaves.map((leave) => leave.toJSON());
 }
 
-async function reviewLeave(reviewerId, leaveId, status, comment) {
-  const reviewer = await ensureReviewerCanReview(reviewerId);
+async function reviewLeave(reviewerId, leaveId, action, comment) {
+  const reviewer = await User.findById(reviewerId).select("_id role isActive");
+
+  if (!reviewer || !reviewer.isActive) {
+    throw new ApiError(401, "Reviewing user is inactive or no longer exists.");
+  }
+
   const leave = await Leave.findById(leaveId);
 
   if (!leave) {
     throw new ApiError(404, "Leave request not found.");
   }
 
-  if (leave.status !== LEAVE_STATUS.PENDING) {
-    throw new ApiError(409, "Only pending leave requests can be reviewed.");
+  const reviewComment = normalizeReviewComment(comment);
+  const isApprove = action === "approved";
+  const isReject = action === "rejected";
+
+  if (!isApprove && !isReject) {
+    throw new ApiError(400, "Review action must be either approved or rejected.");
   }
 
-  leave.status = normalizeReviewStatus(status);
-  leave.reviewedBy = reviewer._id;
-  leave.reviewComment = normalizeReviewComment(comment);
+  if (reviewer.role === USER_ROLES.MANAGER) {
+    if (leave.status !== LEAVE_STATUS.PENDING_MANAGER) {
+      throw new ApiError(409, "This leave request is not awaiting manager review.");
+    }
+
+    leave.managerReviewedBy = reviewer._id;
+    leave.managerReviewedAt = new Date();
+    leave.managerComment = reviewComment;
+
+    if (isApprove) {
+      leave.status = LEAVE_STATUS.PENDING_HR;
+    } else {
+      leave.status = LEAVE_STATUS.REJECTED;
+      leave.reviewedBy = reviewer._id;
+      leave.reviewedAt = new Date();
+      leave.reviewComment = reviewComment;
+    }
+  } else if ([USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.HR].includes(reviewer.role)) {
+    if (leave.status !== LEAVE_STATUS.PENDING_HR) {
+      throw new ApiError(409, "This leave request is not awaiting HR/Admin review.");
+    }
+
+    leave.reviewedBy = reviewer._id;
+    leave.reviewedAt = new Date();
+    leave.reviewComment = reviewComment;
+    leave.status = isApprove ? LEAVE_STATUS.APPROVED : LEAVE_STATUS.REJECTED;
+  } else {
+    throw new ApiError(403, "You do not have permission to review leave requests.");
+  }
 
   await leave.save();
 

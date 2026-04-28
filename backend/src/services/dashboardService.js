@@ -44,12 +44,15 @@ function formatDuration(totalMinutes) {
   };
 }
 
-async function getOnLeaveCount(range) {
-  const distinctUsers = await Leave.distinct("userId", {
+async function getOnLeaveCount(range, employeeIds = null) {
+  const filter = {
     status: LEAVE_STATUS.APPROVED,
     startDate: { $lt: range.tomorrowStart },
     endDate: { $gte: range.todayStart },
-  });
+  };
+  if (employeeIds) filter.userId = { $in: employeeIds };
+
+  const distinctUsers = await Leave.distinct("userId", filter);
 
   return distinctUsers.length;
 }
@@ -81,28 +84,41 @@ async function getLeaveBalance(userId) {
   };
 }
 
-async function getAdminDashboard() {
+async function getAdminDashboard(requester) {
   const { todayStart, tomorrowStart } = getTodayRange();
 
+  // super_admin sees everything; admin is scoped to their company
+  const companyId = requester.role !== USER_ROLES.SUPER_ADMIN ? requester.companyId : null;
+
+  const userFilter = {
+    isActive: true,
+    role: { $nin: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
+  };
+  if (companyId) userFilter.companyId = companyId;
+
+  // Fetch employee IDs for cross-model filtering (Attendance/Claim/Trip link via user ref, not companyId)
+  let employeeIds = null;
+  if (companyId) {
+    employeeIds = (await User.find(userFilter).select("_id").lean()).map((u) => u._id);
+  }
+
+  const attendanceFilter = { workDate: todayStart };
+  if (employeeIds) attendanceFilter.user = { $in: employeeIds };
+
+  const claimFilter = { status: { $in: [CLAIM_STATUS.PENDING_MANAGER, CLAIM_STATUS.PENDING_HR] } };
+  if (employeeIds) claimFilter.userId = { $in: employeeIds };
+
+  const tripFilter = { status: TRIP_STATUS.ACTIVE, endedAt: null };
+  if (employeeIds) tripFilter.user = { $in: employeeIds };
+
   const [totalEmployees, presentToday, onLeave, pendingClaims, activeTrips, idleEmployees] = await Promise.all([
-    User.countDocuments({
-      isActive: true,
-      role: { $ne: USER_ROLES.ADMIN },
-    }),
-    Attendance.countDocuments({
-      workDate: todayStart,
-    }),
-    getOnLeaveCount({ todayStart, tomorrowStart }),
-    Claim.countDocuments({
-      status: CLAIM_STATUS.PENDING,
-    }),
+    User.countDocuments(userFilter),
+    Attendance.countDocuments(attendanceFilter),
+    getOnLeaveCount({ todayStart, tomorrowStart }, employeeIds),
+    Claim.countDocuments(claimFilter),
+    Trip.countDocuments(tripFilter),
     Trip.countDocuments({
-      status: TRIP_STATUS.ACTIVE,
-      endedAt: null,
-    }),
-    Trip.countDocuments({
-      status: TRIP_STATUS.ACTIVE,
-      endedAt: null,
+      ...tripFilter,
       "trackingState.activeIdleEventId": { $ne: null },
     }),
   ]);
@@ -129,7 +145,7 @@ async function getEmployeeDashboard(userId) {
       .lean(),
     Claim.countDocuments({
       userId,
-      status: CLAIM_STATUS.PENDING,
+      status: { $in: [CLAIM_STATUS.PENDING_MANAGER, CLAIM_STATUS.PENDING_HR] },
     }),
     Holiday.find({
       date: { $gte: todayStart },

@@ -16,6 +16,7 @@ function generateAccessToken(user) {
       sub: user._id.toString(),
       role: user.role,
       email: user.email,
+      companyId: user.companyId ? user.companyId.toString() : null,
     },
     getJwtSecret(),
     {

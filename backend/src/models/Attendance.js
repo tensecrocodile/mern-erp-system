@@ -115,6 +115,21 @@ const attendanceSchema = new mongoose.Schema(
       min: 0,
       default: 0,
     },
+    isSuspicious: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    fraudFlags: {
+      type: [
+        {
+          code: { type: String, required: true },
+          detail: { type: String, default: "" },
+          _id: false,
+        },
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,

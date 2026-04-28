@@ -1,8 +1,9 @@
 const USER_ROLES = Object.freeze({
+  SUPER_ADMIN: "super_admin",
   ADMIN: "admin",
   HR: "hr",
-  EMPLOYEE: "employee",
   MANAGER: "manager",
+  EMPLOYEE: "employee",
 });
 
 const WORK_MODES = Object.freeze({
@@ -39,7 +40,8 @@ const CLAIM_TYPES = Object.freeze({
 });
 
 const CLAIM_STATUS = Object.freeze({
-  PENDING: "pending",
+  PENDING_MANAGER: "pending_manager",
+  PENDING_HR: "pending_hr",
   APPROVED: "approved",
   REJECTED: "rejected",
 });
@@ -58,7 +60,8 @@ const LEAVE_TYPES = Object.freeze({
 });
 
 const LEAVE_STATUS = Object.freeze({
-  PENDING: "pending",
+  PENDING_MANAGER: "pending_manager",
+  PENDING_HR: "pending_hr",
   APPROVED: "approved",
   REJECTED: "rejected",
 });

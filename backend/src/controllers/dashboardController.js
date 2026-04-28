@@ -2,8 +2,8 @@ const dashboardService = require("../services/dashboardService");
 const asyncHandler = require("../utils/asyncHandler");
 const { sendSuccess } = require("../utils/response");
 
-exports.getAdminDashboard = asyncHandler(async (_req, res) => {
-  const dashboard = await dashboardService.getAdminDashboard();
+exports.getAdminDashboard = asyncHandler(async (req, res) => {
+  const dashboard = await dashboardService.getAdminDashboard(req.user);
 
   return sendSuccess(res, {
     message: "Admin dashboard fetched successfully.",

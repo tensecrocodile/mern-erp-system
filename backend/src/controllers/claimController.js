@@ -26,7 +26,7 @@ exports.getMyClaims = asyncHandler(async (req, res) => {
 });
 
 exports.getAllClaims = asyncHandler(async (req, res) => {
-  const claims = await claimService.getAllClaims({
+  const claims = await claimService.getAllClaims(req.user._id, req.user.role, {
     status: req.query.status,
     date: req.query.date,
   });

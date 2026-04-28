@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const ApiError = require("../utils/apiError");
-const { WORK_MODES } = require("../utils/constants");
+const { USER_ROLES, WORK_MODES } = require("../utils/constants");
+const logger = require("../utils/logger");
 
 async function getProfile(userId) {
   const user = await User.findById(userId);
@@ -44,4 +45,53 @@ async function updateProfile(userId, data) {
   return user.toJSON();
 }
 
-module.exports = { getProfile, updateProfile };
+async function listEmployees({ requester, role, isActive }) {
+  const query = {};
+
+  // Managers only see their direct reports
+  if (requester.role === USER_ROLES.MANAGER) {
+    query.managerId = requester._id;
+  }
+
+  // Company isolation: when the requester belongs to a company, scope to it
+  if (requester.companyId) {
+    query.companyId = requester.companyId;
+  }
+
+  if (role && Object.values(USER_ROLES).includes(role)) {
+    query.role = role;
+  }
+
+  if (isActive !== undefined && isActive !== "") {
+    query.isActive = isActive === "true" || isActive === true;
+  }
+
+  const users = await User.find(query)
+    .populate("managerId", "fullName email")
+    .populate("assignedGeoFences", "name type isActive")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return users;
+}
+
+async function setStatus({ requesterId, targetId, isActive }) {
+  if (String(requesterId) === String(targetId)) {
+    throw new ApiError(400, "You cannot change your own active status.");
+  }
+
+  const user = await User.findById(targetId);
+  if (!user) throw new ApiError(404, "User not found.");
+
+  user.isActive = Boolean(isActive);
+  await user.save({ validateBeforeSave: false });
+
+  logger.info(`User ${isActive ? "activated" : "deactivated"}.`, {
+    targetId: String(targetId),
+    changedBy: String(requesterId),
+  });
+
+  return user.toJSON();
+}
+
+module.exports = { getProfile, listEmployees, setStatus, updateProfile };

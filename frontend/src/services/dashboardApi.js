@@ -10,7 +10,7 @@ export const getMyDashboard = async () => {
   return response.data;
 };
 
-export const getLiveTrips = async () => {
-  const response = await api.get('/trips/live');
+export const getLiveTracking = async () => {
+  const response = await api.get('/tracking/live');
   return response.data;
 };

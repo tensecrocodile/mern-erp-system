@@ -8,7 +8,7 @@ const router = express.Router();
 
 router.use(protect);
 
-router.get("/admin", authorize(USER_ROLES.ADMIN), dashboardController.getAdminDashboard);
+router.get("/admin", authorize(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), dashboardController.getAdminDashboard);
 router.get("/me", dashboardController.getMyDashboard);
 
 module.exports = router;

@@ -15,7 +15,7 @@ exports.applyLeave = asyncHandler(async (req, res) => {
 });
 
 exports.getAllLeaves = asyncHandler(async (req, res) => {
-  const leaves = await leaveService.getAllLeaves({
+  const leaves = await leaveService.getAllLeaves(req.user._id, req.user.role, {
     status: req.query.status,
   });
 

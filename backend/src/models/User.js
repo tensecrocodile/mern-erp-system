@@ -48,15 +48,28 @@ const userSchema = new mongoose.Schema(
       default: WORK_MODES.FIELD,
       index: true,
     },
+    managerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
     assignedGeoFences: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "GeoFence",
       },
     ],
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Company",
+      default: null,
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,
+      index: true,
     },
     lastLoginAt: {
       type: Date,
