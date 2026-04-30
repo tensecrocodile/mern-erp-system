@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 
 const ROLE_LABELS = {
   super_admin: 'Super Admin',
@@ -13,6 +14,7 @@ const ROLE_LABELS = {
 const Topbar = ({ onToggleSidebar }) => {
   const navigate = useNavigate();
   const { role: authRole, name: authName, clearSession } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -55,6 +57,16 @@ const Topbar = ({ onToggleSidebar }) => {
       </div>
 
       <div className="topbar-right">
+        <button
+          type="button"
+          className="theme-toggle-btn"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+        >
+          {theme === 'dark' ? '☀' : '☾'}
+        </button>
+
         <NavLink
           to="/notifications"
           className="topbar-icon-btn"
