@@ -1,6 +1,21 @@
+const path = require("path");
 const attendanceService = require("../services/attendanceService");
 const asyncHandler = require("../utils/asyncHandler");
+const ApiError = require("../utils/apiError");
 const { sendSuccess } = require("../utils/response");
+
+exports.uploadSelfie = asyncHandler(async (req, res) => {
+  if (!req.file) throw new ApiError(400, "No selfie image provided.");
+
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const url = `${baseUrl}/uploads/selfies/${req.file.filename}`;
+
+  return sendSuccess(res, {
+    statusCode: 201,
+    message: "Selfie uploaded.",
+    data: { url },
+  });
+});
 
 exports.checkIn = asyncHandler(async (req, res) => {
   const { attendance } = await attendanceService.checkIn({

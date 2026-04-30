@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const ROLE_LABELS = {
   super_admin: 'Super Admin',
@@ -11,11 +12,12 @@ const ROLE_LABELS = {
 
 const Topbar = ({ onToggleSidebar }) => {
   const navigate = useNavigate();
+  const { role: authRole, name: authName, clearSession } = useAuth();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const role = localStorage.getItem('role') || 'employee';
-  const name = localStorage.getItem('name') || 'User';
+  const role = authRole || 'employee';
+  const name = authName || 'User';
   const initials = name
     .split(' ')
     .map((w) => w[0])
@@ -35,9 +37,7 @@ const Topbar = ({ onToggleSidebar }) => {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
-    localStorage.removeItem('name');
+    clearSession();
     navigate('/login', { replace: true });
   };
 

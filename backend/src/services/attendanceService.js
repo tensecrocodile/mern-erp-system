@@ -89,27 +89,25 @@ function normalizeLocation(location) {
   };
 }
 
-function normalizeAttendanceEventPayload(payload, options) {
-  const selfieUrl = typeof payload.selfieUrl === "string" ? payload.selfieUrl.trim() : "";
-
-  if (!selfieUrl) {
-    throw new ApiError(400, "selfieUrl is required.");
-  }
+function normalizeSelfieUrl(raw) {
+  const selfieUrl = typeof raw === "string" ? raw.trim() : "";
+  if (!selfieUrl) throw new ApiError(400, "selfieUrl is required.");
 
   try {
-    const parsedUrl = new URL(selfieUrl);
-
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-      throw new Error("Unsupported protocol");
-    }
-  } catch (_error) {
-    throw new ApiError(400, "selfieUrl must be a valid HTTP or HTTPS URL.");
+    const { protocol } = new URL(selfieUrl);
+    if (!["http:", "https:"].includes(protocol)) throw new Error();
+  } catch {
+    throw new ApiError(400, "selfieUrl must be a valid HTTP or HTTPS URL returned by POST /attendance/selfie.");
   }
 
+  return selfieUrl;
+}
+
+function normalizeAttendanceEventPayload(payload, options) {
   return {
-    time: parseEventTime(payload[options.timeField], options.timeField),
-    location: normalizeLocation(payload.location),
-    selfieUrl,
+    time:      parseEventTime(payload[options.timeField], options.timeField),
+    location:  normalizeLocation(payload.location),
+    selfieUrl: normalizeSelfieUrl(payload.selfieUrl),
   };
 }
 

@@ -1,3 +1,53 @@
+/* ── Selfie modal ─────────────────────────────────────────────── */
+.selfie-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.selfie-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+}
+
+.selfie-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  text-align: center;
+}
+
+.selfie-video,
+.selfie-preview {
+  width: 100%;
+  border-radius: 8px;
+  background: #000;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  transform: scaleX(-1); /* mirror like a selfie camera */
+}
+
+.selfie-preview {
+  transform: none;
+}
+
+.selfie-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
 /* Leaflet overrides — all layout/button/alert styles come from App.css */
 .leaflet-container {
   background-color: #e0e7ff;

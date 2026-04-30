@@ -1,3 +1,4 @@
+const path = require("path");
 const cors = require("cors");
 const express = require("express");
 const morgan = require("morgan");
@@ -94,6 +95,9 @@ app.get("/", (_req, res) => {
     },
   });
 });
+
+// Serve uploaded selfies
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // API Routes
 app.use("/api/v1", requireDatabaseConnection, apiRoutes);

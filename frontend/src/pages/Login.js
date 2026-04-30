@@ -1,13 +1,27 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { login } from '../services/authApi';
+import { useNavigate, Navigate } from 'react-router-dom';
+import { loginRequest } from '../services/authApi';
+import { useAuth } from '../context/AuthContext';
+
+const ROLE_HOME = {
+  super_admin: '/dashboard',
+  admin:       '/dashboard',
+  hr:          '/dashboard',
+  manager:     '/dashboard',
+  employee:    '/dashboard',
+};
 
 const Login = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const { isAuthenticated, setSession } = useAuth();
+  const [email, setEmail]     = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError]     = useState(null);
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -15,8 +29,10 @@ const Login = () => {
     setError(null);
 
     try {
-      await login(email.trim(), password);
-      navigate('/dashboard');
+      const { token, user } = await loginRequest(email.trim(), password);
+      if (!token || !user) throw new Error('Invalid response from server.');
+      setSession(token, user);
+      navigate(ROLE_HOME[user.role] ?? '/dashboard', { replace: true });
     } catch (err) {
       setError(err?.message || 'Login failed. Check your credentials.');
     } finally {
@@ -58,7 +74,7 @@ const Login = () => {
               placeholder="••••••••"
             />
           </label>
-          {error && <div className="alert alert-error">{error}</div>}
+          {error && <div className="alert alert-error" role="alert">{error}</div>}
           <button className="btn btn-primary" type="submit" disabled={loading}>
             {loading ? 'Signing in…' : 'Sign In'}
           </button>

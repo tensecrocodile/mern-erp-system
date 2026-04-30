@@ -21,12 +21,18 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401) {
+    const status = error?.response?.status;
+    const requestUrl = error?.config?.url || '';
+    const isAuthEndpoint = requestUrl.includes('/auth/');
+
+    if (status === 401 && !isAuthEndpoint) {
       localStorage.removeItem('token');
       localStorage.removeItem('role');
+      localStorage.removeItem('name');
       window.location.href = '/login';
       return Promise.reject(new Error('Session expired. Please sign in again.'));
     }
+
     const message = error?.response?.data?.message || error.message;
     return Promise.reject(new Error(message));
   }

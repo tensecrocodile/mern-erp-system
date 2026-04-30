@@ -3,6 +3,7 @@ require("dotenv").config();
 const app = require("./app");
 const { connectDatabase, disconnectDatabase } = require("./config/database");
 const logger = require("./utils/logger");
+const User = require("./models/User");
 
 const port = Number(process.env.PORT) || 5000;
 let server;
@@ -51,9 +52,19 @@ process.on("SIGTERM", () => {
   shutdown(0);
 });
 
+async function seedIfEmpty() {
+  const count = await User.countDocuments();
+  if (count > 0) return;
+  logger.info("No users found — running seed.");
+  const { runSeed } = require("./scripts/seed");
+  await runSeed();
+  logger.info("Auto-seed complete.");
+}
+
 async function startServer() {
   try {
     await connectDatabase();
+    await seedIfEmpty();
 
     server = app.listen(port, () => {
       logger.info("Server running.", {

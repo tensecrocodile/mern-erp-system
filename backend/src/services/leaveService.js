@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Leave = require("../models/Leave");
 const User = require("../models/User");
 const ApiError = require("../utils/apiError");
@@ -41,28 +42,37 @@ async function applyLeave(userId, data) {
 
   if (endDate < startDate) throw new ApiError(400, "endDate cannot be earlier than startDate.");
 
-  const overlap = await Leave.findOne({
-    userId,
-    status:    { $in: [LEAVE_STATUS.APPROVED, LEAVE_STATUS.PENDING_MANAGER, LEAVE_STATUS.PENDING_HR] },
-    startDate: { $lte: endDate },
-    endDate:   { $gte: startDate },
-  });
+  const session = await mongoose.startSession();
+  let leave;
 
-  if (overlap) {
-    const label = overlap.status === LEAVE_STATUS.APPROVED ? "an approved" : "a pending";
-    throw new ApiError(409, `Leave dates overlap with ${label} leave request.`);
+  try {
+    await session.withTransaction(async () => {
+      const overlap = await Leave.findOne({
+        userId,
+        status:    { $in: [LEAVE_STATUS.APPROVED, LEAVE_STATUS.PENDING_MANAGER, LEAVE_STATUS.PENDING_HR] },
+        startDate: { $lte: endDate },
+        endDate:   { $gte: startDate },
+      }).session(session);
+
+      if (overlap) {
+        const label = overlap.status === LEAVE_STATUS.APPROVED ? "an approved" : "a pending";
+        throw new ApiError(409, `Leave dates overlap with ${label} leave request.`);
+      }
+
+      [leave] = await Leave.create([{
+        userId,
+        type:            normalizeLeaveType(data.type),
+        startDate,
+        endDate,
+        reason:          normalizeReason(data.reason),
+        status:          LEAVE_STATUS.PENDING_MANAGER,
+        currentStage:    "manager",
+        approvalHistory: [],
+      }], { session });
+    });
+  } finally {
+    await session.endSession();
   }
-
-  const leave = await Leave.create({
-    userId,
-    type:      normalizeLeaveType(data.type),
-    startDate,
-    endDate,
-    reason:    normalizeReason(data.reason),
-    status:        LEAVE_STATUS.PENDING_MANAGER,
-    currentStage:  "manager",
-    approvalHistory: [],
-  });
 
   emitLeaveSubmitted({
     eventName: "leave.submitted",

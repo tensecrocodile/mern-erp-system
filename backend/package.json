@@ -22,7 +22,8 @@
     "express-validator": "^7.3.2",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.5.0",
-    "morgan": "^1.10.1"
+    "morgan": "^1.10.1",
+    "multer": "^2.1.1"
   },
   "devDependencies": {
     "mongodb-memory-server": "^11.0.1",

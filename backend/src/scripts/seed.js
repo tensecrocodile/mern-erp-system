@@ -271,8 +271,8 @@ async function createClaim(employeeId, adminId) {
     description: "Taxi and parking expenses for client visit.",
     attachments: ["https://example.com/claims/travel-receipt-1.jpg"],
     status: CLAIM_STATUS.PENDING_MANAGER,
-    reviewedBy: null,
-    reviewComment: "",
+    currentStage: "manager",
+    approvalHistory: [],
   });
 
   await Claim.create({
@@ -283,8 +283,23 @@ async function createClaim(employeeId, adminId) {
     description: "Meal expense during branch visit.",
     attachments: ["https://example.com/claims/food-receipt-1.jpg"],
     status: CLAIM_STATUS.APPROVED,
-    reviewedBy: adminId,
-    reviewComment: "Approved for reimbursement.",
+    currentStage: "completed",
+    approvalHistory: [
+      {
+        action: "approved",
+        by: adminId,
+        role: "manager",
+        comment: "Approved for reimbursement.",
+        timestamp: new Date(),
+      },
+      {
+        action: "approved",
+        by: adminId,
+        role: "hr",
+        comment: "",
+        timestamp: new Date(),
+      },
+    ],
   });
 }
 
@@ -299,52 +314,64 @@ async function createLeaves(employeeTwoId, adminId) {
     endDate: tomorrow,
     reason: "Family function",
     status: LEAVE_STATUS.APPROVED,
-    reviewedBy: adminId,
-    reviewComment: "Approved.",
+    currentStage: "completed",
+    approvalHistory: [
+      {
+        action: "approved",
+        by: adminId,
+        role: "manager",
+        comment: "Approved.",
+        timestamp: new Date(),
+      },
+      {
+        action: "approved",
+        by: adminId,
+        role: "hr",
+        comment: "",
+        timestamp: new Date(),
+      },
+    ],
   });
 }
 
 async function runSeed() {
-  await connectDatabase();
+  await clearDemoCollections();
 
-  try {
-    await clearDemoCollections();
+  const { admin, employeeOne, employeeTwo } = await createUsers();
 
-    const { admin, employeeOne, employeeTwo } = await createUsers();
+  await Promise.all([
+    createHoliday(admin._id, employeeTwo._id),
+    createAttendance(employeeOne._id),
+    createTrip(employeeOne._id),
+    createClaim(employeeOne._id, admin._id),
+    createLeaves(employeeTwo._id, admin._id),
+  ]);
 
-    await Promise.all([
-      createHoliday(admin._id, employeeTwo._id),
-      createAttendance(employeeOne._id),
-      createTrip(employeeOne._id),
-      createClaim(employeeOne._id, admin._id),
-      createLeaves(employeeTwo._id, admin._id),
-    ]);
-
-    logger.info("Seed data created successfully.", {
-      adminEmail: admin.email,
-      employeeEmails: [employeeOne.email, employeeTwo.email],
-    });
-  } finally {
-    await disconnectDatabase();
-  }
+  logger.info("Seed data created successfully.", {
+    adminEmail: admin.email,
+    employeeEmails: [employeeOne.email, employeeTwo.email],
+  });
 }
 
-runSeed()
-  .then(() => {
-    logger.info("Database seeding completed.");
-    process.exit(0);
-  })
-  .catch(async (error) => {
-    logger.error("Database seeding failed.", {
-      message: error.message,
-      stack: error.stack,
-    });
+module.exports = { runSeed };
 
-    try {
-      if (mongoose.connection.readyState !== 0) {
-        await disconnectDatabase();
+// Allow running directly: node src/scripts/seed.js
+if (require.main === module) {
+  connectDatabase()
+    .then(runSeed)
+    .then(() => {
+      logger.info("Database seeding completed.");
+      process.exit(0);
+    })
+    .catch(async (error) => {
+      logger.error("Database seeding failed.", {
+        message: error.message,
+        stack: error.stack,
+      });
+      try {
+        if (mongoose.connection.readyState !== 0) await disconnectDatabase();
+      } finally {
+        process.exit(1);
       }
-    } finally {
-      process.exit(1);
-    }
-  });
+    });
+}

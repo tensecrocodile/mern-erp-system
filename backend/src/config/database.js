@@ -1,130 +1,98 @@
-const fs = require("fs");
-const path = require("path");
-
 const mongoose = require("mongoose");
-const { MongoMemoryServer } = require("mongodb-memory-server");
+const { MongoMemoryReplSet } = require("mongodb-memory-server");
 
 const logger = require("../utils/logger");
 
-const embeddedDatabaseState = {
-  memoryServer: null,
-  source: "external",
-  uri: null,
+const REPLSET_NAME   = process.env.MONGODB_REPLSET_NAME || "rs0";
+const EMBEDDED_PORT  = Number(process.env.MONGODB_MEMORY_PORT) || 39017;
+const EMBEDDED_DB    = process.env.MONGODB_DB_NAME || "erp_system_demo";
+
+const state = {
+  replSet: null,
+  source:  "external",
+  uri:     null,
 };
 
-const EMBEDDED_DB_PORT = Number(process.env.MONGODB_MEMORY_PORT) || 39017;
-const EMBEDDED_DB_NAME = process.env.MONGODB_DB_NAME || "erp_system_demo";
-const EMBEDDED_DB_PATH = path.join(process.cwd(), ".demo-mongodb");
-
-function shouldUseEmbeddedMongo() {
-  const explicitFlag = process.env.USE_EMBEDDED_MONGO;
-
-  if (explicitFlag === undefined) {
-    return !process.env.MONGODB_URI;
-  }
-
-  return explicitFlag === "true";
+function embeddedUri() {
+  return `mongodb://127.0.0.1:${EMBEDDED_PORT}/${EMBEDDED_DB}?replicaSet=${REPLSET_NAME}`;
 }
 
-function getEmbeddedMongoUri() {
-  return `mongodb://127.0.0.1:${EMBEDDED_DB_PORT}/${EMBEDDED_DB_NAME}`;
-}
-
-async function startEmbeddedMongoServer() {
-  if (embeddedDatabaseState.memoryServer) {
-    return embeddedDatabaseState.memoryServer;
-  }
-
-  fs.mkdirSync(EMBEDDED_DB_PATH, { recursive: true });
-
-  embeddedDatabaseState.memoryServer = await MongoMemoryServer.create({
-    instance: {
-      dbName: EMBEDDED_DB_NAME,
-      dbPath: EMBEDDED_DB_PATH,
-      ip: "127.0.0.1",
-      port: EMBEDDED_DB_PORT,
-    },
+async function probeRunning() {
+  const probe = mongoose.createConnection(embeddedUri(), {
+    serverSelectionTimeoutMS: 1500,
+    directConnection: false,
   });
-
-  logger.info("Embedded MongoDB server started.", {
-    dbName: EMBEDDED_DB_NAME,
-    port: EMBEDDED_DB_PORT,
-  });
-
-  return embeddedDatabaseState.memoryServer;
-}
-
-async function resolveMongoUri() {
-  if (process.env.MONGODB_URI) {
-    embeddedDatabaseState.source = "external";
-    embeddedDatabaseState.uri = process.env.MONGODB_URI;
-    return process.env.MONGODB_URI;
-  }
-
-  if (!shouldUseEmbeddedMongo()) {
-    throw new Error("MONGODB_URI is not configured.");
-  }
-
-  const embeddedMongoUri = getEmbeddedMongoUri();
-
   try {
-    const probeConnection = await mongoose.createConnection(embeddedMongoUri, {
-      serverSelectionTimeoutMS: 800,
-    }).asPromise();
-
-    await probeConnection.close();
-
-    embeddedDatabaseState.source = "embedded";
-    embeddedDatabaseState.uri = embeddedMongoUri;
-    return embeddedMongoUri;
-  } catch (_error) {
-    await startEmbeddedMongoServer();
-    embeddedDatabaseState.source = "embedded";
-    embeddedDatabaseState.uri = embeddedMongoUri;
-    return embeddedMongoUri;
+    await probe.asPromise();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await probe.close().catch(() => {});
   }
+}
+
+async function startReplSet() {
+  if (state.replSet) return;
+
+  state.replSet = await MongoMemoryReplSet.create({
+    replSet: {
+      name:          REPLSET_NAME,
+      count:         1,
+      storageEngine: "wiredTiger",
+    },
+    instanceOpts: [{ port: EMBEDDED_PORT }],
+  });
+
+  logger.info("Embedded MongoDB replica set started.", {
+    name: REPLSET_NAME,
+    port: EMBEDDED_PORT,
+  });
+}
+
+async function resolveUri() {
+  if (process.env.MONGODB_URI) {
+    state.source = "external";
+    state.uri    = process.env.MONGODB_URI;
+    return state.uri;
+  }
+
+  const already = await probeRunning();
+  if (!already) await startReplSet();
+
+  state.source = "embedded";
+  state.uri    = embeddedUri();
+  return state.uri;
 }
 
 async function connectDatabase() {
   mongoose.set("strictQuery", true);
   mongoose.set("bufferCommands", false);
 
-  const mongoUri = await resolveMongoUri();
+  const uri = await resolveUri();
 
-  await mongoose.connect(mongoUri, {
-    serverSelectionTimeoutMS: 10000,
+  await mongoose.connect(uri, {
+    serverSelectionTimeoutMS: 10_000,
+    replicaSet: state.source === "embedded" ? REPLSET_NAME : undefined,
   });
 
-  logger.info("MongoDB connected.", {
-    source: embeddedDatabaseState.source,
-    uri: mongoUri,
-  });
+  logger.info("MongoDB connected.", { source: state.source, uri });
 
-  return {
-    source: embeddedDatabaseState.source,
-    uri: mongoUri,
-  };
+  return { source: state.source, uri };
 }
 
 async function disconnectDatabase() {
   await mongoose.disconnect();
 
-  if (embeddedDatabaseState.memoryServer) {
-    await embeddedDatabaseState.memoryServer.stop();
-    embeddedDatabaseState.memoryServer = null;
-    logger.info("Embedded MongoDB server stopped.");
+  if (state.replSet) {
+    await state.replSet.stop();
+    state.replSet = null;
+    logger.info("Embedded MongoDB replica set stopped.");
   }
 }
 
 function getDatabaseInfo() {
-  return {
-    source: embeddedDatabaseState.source,
-    uri: embeddedDatabaseState.uri,
-  };
+  return { source: state.source, uri: state.uri };
 }
 
-module.exports = {
-  connectDatabase,
-  disconnectDatabase,
-  getDatabaseInfo,
-};
+module.exports = { connectDatabase, disconnectDatabase, getDatabaseInfo };

@@ -12,6 +12,7 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import './GeoFenceManager.css';
 import {
   getGeofences,
   createGeofence,

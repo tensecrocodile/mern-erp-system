@@ -1,5 +1,14 @@
 ﻿import api from './api';
 
+export const uploadSelfie = async (blob) => {
+  const form = new FormData();
+  form.append('selfie', blob, 'selfie.jpg');
+  const response = await api.post('/attendance/selfie', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data?.data?.url;
+};
+
 export const checkIn = async (location, selfieUrl) => {
   const response = await api.post('/attendance/check-in', {
     checkInAt: new Date().toISOString(),
