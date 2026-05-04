@@ -126,8 +126,8 @@ const Approvals = () => {
                       </span>
                     )}
                     <ReviewRow
-                      onApprove={() => handleClaimReview(claim._id, 'approved')}
-                      onReject={() => handleClaimReview(claim._id, 'rejected')}
+                      onApprove={() => handleClaimReview(claim._id, 'approve')}
+                      onReject={() => handleClaimReview(claim._id, 'reject')}
                       disabled={reviewing === claim._id}
                       label={reviewing === claim._id ? 'Saving…' : null}
                     />
@@ -165,8 +165,8 @@ const Approvals = () => {
                       </span>
                     )}
                     <ReviewRow
-                      onApprove={() => handleLeaveReview(leave._id, 'approved')}
-                      onReject={() => handleLeaveReview(leave._id, 'rejected')}
+                      onApprove={() => handleLeaveReview(leave._id, 'approve')}
+                      onReject={() => handleLeaveReview(leave._id, 'reject')}
                       disabled={reviewing === leave._id}
                       label={reviewing === leave._id ? 'Saving…' : null}
                     />

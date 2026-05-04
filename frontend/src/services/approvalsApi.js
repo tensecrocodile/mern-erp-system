@@ -5,12 +5,18 @@ export const getApprovals = async () => {
   return response.data;
 };
 
-export const reviewClaim = async (id, status, comment = '') => {
-  const response = await api.patch(`/claims/${id}/review`, { status, comment });
+const toReviewAction = (value) => {
+  if (value === 'approved') return 'approve';
+  if (value === 'rejected') return 'reject';
+  return value;
+};
+
+export const reviewClaim = async (id, action, comment = '') => {
+  const response = await api.patch(`/claims/${id}/review`, { action: toReviewAction(action), comment });
   return response.data;
 };
 
-export const reviewLeave = async (id, status, comment = '') => {
-  const response = await api.patch(`/leaves/${id}/review`, { status, comment });
+export const reviewLeave = async (id, action, comment = '') => {
+  const response = await api.patch(`/leaves/${id}/review`, { action: toReviewAction(action), comment });
   return response.data;
 };
