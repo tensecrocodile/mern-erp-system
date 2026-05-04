@@ -12,9 +12,9 @@ const router = express.Router();
 
 router.use(protect);
 
-router.post("/", authorize(USER_ROLES.ADMIN), validateHolidayCreation, holidayController.createHoliday);
-router.get("/", authorize(USER_ROLES.ADMIN), holidayController.getAllHolidays);
+router.post("/", authorize(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), validateHolidayCreation, holidayController.createHoliday);
+router.get("/", authorize(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), holidayController.getAllHolidays);
 router.get("/me", holidayController.getMyHolidays);
-router.delete("/:id", authorize(USER_ROLES.ADMIN), validateHolidayIdParam, holidayController.deleteHoliday);
+router.delete("/:id", authorize(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), validateHolidayIdParam, holidayController.deleteHoliday);
 
 module.exports = router;

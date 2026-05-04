@@ -65,6 +65,11 @@ async function reviewRequest({ model, requestId, reviewerId, action, comment }) 
         );
       }
 
+      const requestOwnerId = (doc.userId ?? doc.user)?.toString();
+      if (requestOwnerId && requestOwnerId === reviewerId.toString()) {
+        throw new ApiError(403, "You cannot approve or reject your own request.");
+      }
+
       const previousStatus = doc.status;
       const transition     = TRANSITION_MAP[doc.status][action];
 

@@ -282,6 +282,11 @@ async function deleteGeofence(id) {
   const fence = await GeoFence.findByIdAndDelete(id);
   if (!fence) throw new ApiError(404, "Geofence not found.");
 
+  await User.updateMany(
+    { assignedGeoFences: fence._id },
+    { $pull: { assignedGeoFences: fence._id } }
+  );
+
   logger.info("Geofence deleted.", { fenceId: id, name: fence.name });
 }
 

@@ -7,7 +7,7 @@ const { sendSuccess } = require("../utils/response");
 exports.uploadSelfie = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, "No selfie image provided.");
 
-  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const baseUrl = process.env.BASE_URL || `${req.protocol}://localhost:${process.env.PORT || 5000}`;
   const url = `${baseUrl}/uploads/selfies/${req.file.filename}`;
 
   return sendSuccess(res, {

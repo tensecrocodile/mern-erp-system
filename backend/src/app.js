@@ -1,6 +1,7 @@
 const path = require("path");
 const cors = require("cors");
 const express = require("express");
+const helmet = require("helmet");
 const morgan = require("morgan");
 const mongoose = require("mongoose");
 const rateLimit = require("express-rate-limit");
@@ -14,6 +15,8 @@ const logger = require("./utils/logger");
 const { sendSuccess } = require("./utils/response");
 
 const app = express();
+
+app.use(helmet());
 
 initializeNotificationEventListeners();
 
@@ -65,7 +68,16 @@ const authRateLimiter = rateLimit({
   message: { success: false, message: "Too many requests. Please try again later.", data: null },
 });
 
+const globalRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many requests. Please try again later.", data: null },
+});
+
 app.use("/api/v1/auth", authRateLimiter);
+app.use("/api/v1", globalRateLimiter);
 
 function sendHealthResponse(_req, res) {
   return sendSuccess(res, {
@@ -96,8 +108,19 @@ app.get("/", (_req, res) => {
   });
 });
 
-// Serve uploaded selfies
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+// Serve uploaded selfies — requires a valid JWT
+const { verifyAccessToken } = require("./utils/jwt");
+app.use("/uploads", (req, res, next) => {
+  try {
+    const auth = req.headers.authorization || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+    if (!token) return res.status(401).json({ success: false, message: "Authentication required." });
+    verifyAccessToken(token);
+    next();
+  } catch {
+    return res.status(401).json({ success: false, message: "Invalid or expired token." });
+  }
+}, express.static(path.join(process.cwd(), "uploads")));
 
 // API Routes
 app.use("/api/v1", requireDatabaseConnection, apiRoutes);

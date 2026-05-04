@@ -22,7 +22,7 @@ async function createAnnouncement(adminUserId, data) {
 
   if (!isDraft && publishedAt) {
     await notifyUsers(announcement).catch((err) => {
-      logger.warn({ err }, "Failed to send announcement notifications.");
+      logger.warn("Failed to send announcement notifications.", { err });
     });
   }
 
