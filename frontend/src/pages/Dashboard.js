@@ -141,7 +141,7 @@ const Dashboard = () => {
     };
 
     fetchLive();
-    intervalRef.current = setInterval(fetchLive, 5_000);
+    intervalRef.current = setInterval(fetchLive, 30_000);
     return () => clearInterval(intervalRef.current);
   }, [isAdmin]);
 

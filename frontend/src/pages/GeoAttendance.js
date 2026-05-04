@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Circle, Polygon, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { calculateDistance, isUserInsideGeoFence } from '../utils/geo';
+import { calculateDistance, isUserInsideGeoFence, isPointInPolygon } from '../utils/geo';
 import { checkIn, checkOut, uploadSelfie } from '../services/attendanceApi';
 import { getMyGeofences } from '../services/geoFenceApi';
 import './GeoAttendance.css';
@@ -167,6 +167,9 @@ const GeoAttendance = () => {
     if (primaryFence?.type === 'circle' && primaryFence.center?.latitude) {
       return { lat: primaryFence.center.latitude, lng: primaryFence.center.longitude };
     }
+    if (primaryFence?.type === 'polygon' && primaryFence.polygon?.length > 0) {
+      return { lat: primaryFence.polygon[0].lat, lng: primaryFence.polygon[0].lng };
+    }
     return DEFAULT_MAP_CENTER;
   }, [primaryFence]);
 
@@ -176,6 +179,9 @@ const GeoAttendance = () => {
       const fenceCenter = { lat: primaryFence.center.latitude, lng: primaryFence.center.longitude };
       const distance = Math.round(calculateDistance(userLocation, fenceCenter));
       return { distance, isInside: isUserInsideGeoFence(userLocation, fenceCenter, primaryFence.radius) };
+    }
+    if (primaryFence.type === 'polygon' && Array.isArray(primaryFence.polygon) && primaryFence.polygon.length >= 3) {
+      return { distance: null, isInside: isPointInPolygon(userLocation, primaryFence.polygon) };
     }
     return { distance: null, isInside: null };
   }, [userLocation, primaryFence]);
@@ -332,18 +338,25 @@ const GeoAttendance = () => {
       <div className="geo-map-wrapper">
         <MapContainer center={[mapCenter.lat, mapCenter.lng]} zoom={16} scrollWheelZoom={false} className="geo-map">
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
-          {fences.map((fence) =>
-            fence.type === 'circle' && fence.center?.latitude ? (
-              <Circle
-                key={fence._id}
-                center={[fence.center.latitude, fence.center.longitude]}
-                radius={fence.radius}
-                pathOptions={{ color: fence.color || '#6366f1', fillColor: fence.color || '#6366f1', fillOpacity: 0.15, weight: 2 }}
-              >
-                <Popup>{fence.name}</Popup>
-              </Circle>
-            ) : null
-          )}
+          {fences.map((fence) => {
+            const color = fence.color || '#6366f1';
+            const pathOptions = { color, fillColor: color, fillOpacity: 0.15, weight: 2 };
+            if (fence.type === 'circle' && fence.center?.latitude) {
+              return (
+                <Circle key={fence._id} center={[fence.center.latitude, fence.center.longitude]} radius={fence.radius} pathOptions={pathOptions}>
+                  <Popup>{fence.name}</Popup>
+                </Circle>
+              );
+            }
+            if (fence.type === 'polygon' && Array.isArray(fence.polygon) && fence.polygon.length >= 3) {
+              return (
+                <Polygon key={fence._id} positions={fence.polygon.map((p) => [p.lat, p.lng])} pathOptions={pathOptions}>
+                  <Popup>{fence.name}</Popup>
+                </Polygon>
+              );
+            }
+            return null;
+          })}
           {userLocation && (
             <>
               <Marker position={[userLocation.lat, userLocation.lng]}>

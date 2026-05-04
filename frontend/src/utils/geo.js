@@ -23,3 +23,16 @@ export const isUserInsideGeoFence = (userLocation, geoFenceCenter, radiusMeters)
   const distance = calculateDistance(userLocation, geoFenceCenter);
   return distance <= radiusMeters;
 };
+
+// Ray-casting algorithm for polygon containment
+export const isPointInPolygon = (point, polygon) => {
+  const { lat, lng } = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lat, yi = polygon[i].lng;
+    const xj = polygon[j].lat, yj = polygon[j].lng;
+    const intersects = yi > lng !== yj > lng && lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+};

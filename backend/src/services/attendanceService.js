@@ -183,8 +183,6 @@ async function checkIn({ userId, payload }) {
     analyseCheckIn(userId, event.location, event.time),
   ]);
 
-  await enrichLocationWithAddress(event.location);
-
   const isSuspicious = fraudFlags.length > 0;
 
   if (isSuspicious) {
@@ -208,11 +206,20 @@ async function checkIn({ userId, payload }) {
     fraudFlags,
   });
 
+  // Enrich address in the background — must not block the check-in response
+  enrichLocationWithAddress(event.location).then(async () => {
+    if (event.location.address) {
+      await Attendance.updateOne(
+        { _id: attendance._id },
+        { "checkIn.location.address": event.location.address }
+      );
+    }
+  }).catch(() => {});
+
   logger.info("Check-in recorded.", {
     userId: userId.toString(),
     attendanceId: attendance._id.toString(),
     workDate: workDate.toISOString(),
-    address: attendance.checkIn.location.address || "—",
   });
 
   return {
